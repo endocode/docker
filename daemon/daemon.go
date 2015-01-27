@@ -626,7 +626,14 @@ func (daemon *Daemon) newContainer(name string, config *runconfig.Config, imgID 
 	var (
 		id  string
 		err error
+		env engine.Env
+		aci bool
 	)
+
+	// Hack to get started while the cli does not implement "--format aci" yet
+	env = config.Env
+	aci = env.Get("ACI_ENABLE") == "1"
+
 	id, name, err = daemon.generateIdAndName(name)
 	if err != nil {
 		return nil, err
@@ -638,6 +645,7 @@ func (daemon *Daemon) newContainer(name string, config *runconfig.Config, imgID 
 	container := &Container{
 		// FIXME: we should generate the ID here instead of receiving it as an argument
 		ID:              id,
+		aci:             aci,
 		Created:         time.Now().UTC(),
 		Path:            entrypoint,
 		Args:            args, //FIXME: de-duplicate from config

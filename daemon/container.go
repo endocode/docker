@@ -55,7 +55,8 @@ type Container struct {
 	root   string         // Path to the "home" of the container, including metadata.
 	basefs string         // Path to the graphdriver mountpoint
 
-	ID string
+	ID  string
+	aci bool
 
 	Created time.Time
 
@@ -290,7 +291,37 @@ func populateCommand(c *Container, env []string) error {
 	}
 
 	processConfig.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	processConfig.Env = env
+
+	if !c.aci {
+		processConfig.Env = env
+	} else {
+		var env2 engine.Env
+		env2 = env
+		processConfig.Env = append(env, "ACI_CONTAINER=1")
+
+		c.command = &execdriver.Command{
+			ID:                 c.ID,
+			Rootfs:             env2.Get("ACI_ROOTFS"),
+			ReadonlyRootfs:     c.hostConfig.ReadonlyRootfs,
+			InitPath:           "/.dockerinit",
+			WorkingDir:         c.Config.WorkingDir,
+			Network:            en,
+			Ipc:                ipc,
+			Pid:                pid,
+			Resources:          resources,
+			AllowedDevices:     allowedDevices,
+			AutoCreatedDevices: autoCreatedDevices,
+			CapAdd:             c.hostConfig.CapAdd,
+			CapDrop:            c.hostConfig.CapDrop,
+			ProcessConfig:      processConfig,
+			ProcessLabel:       c.GetProcessLabel(),
+			MountLabel:         c.GetMountLabel(),
+			LxcConfig:          lxcConfig,
+			AppArmorProfile:    c.AppArmorProfile,
+		}
+
+		return nil
+	}
 
 	c.command = &execdriver.Command{
 		ID:                 c.ID,
