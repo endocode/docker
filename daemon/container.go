@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/appc/spec/schema"
+
 	"github.com/docker/libcontainer/devices"
 	"github.com/docker/libcontainer/label"
 
@@ -205,6 +207,24 @@ func (container *Container) getRootResourcePath(path string) (string, error) {
 }
 
 func populateCommand(c *Container, env []string) error {
+	var env2 engine.Env
+	var m schema.ImageManifest
+
+	if c.aci {
+		env2 = env
+
+		b, err := ioutil.ReadFile(env2.Get("ACI_MANIFEST"))
+		if err != nil {
+			return err
+		}
+
+		m = schema.ImageManifest{}
+		err = m.UnmarshalJSON(b)
+		if err != nil {
+			return err
+		}
+	}
+
 	en := &execdriver.Network{
 		Mtu:       c.daemon.config.Mtu,
 		Interface: nil,
@@ -292,12 +312,9 @@ func populateCommand(c *Container, env []string) error {
 
 	processConfig.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 
-	if !c.aci {
-		processConfig.Env = env
-	} else {
-		var env2 engine.Env
-		env2 = env
-		processConfig.Env = append(env, "ACI_CONTAINER=1")
+	processConfig.Env = env
+	if c.aci {
+		processConfig.Entrypoint = m.App.Exec[0]
 
 		c.command = &execdriver.Command{
 			ID:                 c.ID,
@@ -319,29 +336,27 @@ func populateCommand(c *Container, env []string) error {
 			LxcConfig:          lxcConfig,
 			AppArmorProfile:    c.AppArmorProfile,
 		}
-
-		return nil
-	}
-
-	c.command = &execdriver.Command{
-		ID:                 c.ID,
-		Rootfs:             c.RootfsPath(),
-		ReadonlyRootfs:     c.hostConfig.ReadonlyRootfs,
-		InitPath:           "/.dockerinit",
-		WorkingDir:         c.Config.WorkingDir,
-		Network:            en,
-		Ipc:                ipc,
-		Pid:                pid,
-		Resources:          resources,
-		AllowedDevices:     allowedDevices,
-		AutoCreatedDevices: autoCreatedDevices,
-		CapAdd:             c.hostConfig.CapAdd,
-		CapDrop:            c.hostConfig.CapDrop,
-		ProcessConfig:      processConfig,
-		ProcessLabel:       c.GetProcessLabel(),
-		MountLabel:         c.GetMountLabel(),
-		LxcConfig:          lxcConfig,
-		AppArmorProfile:    c.AppArmorProfile,
+	} else {
+		c.command = &execdriver.Command{
+			ID:                 c.ID,
+			Rootfs:             c.RootfsPath(),
+			ReadonlyRootfs:     c.hostConfig.ReadonlyRootfs,
+			InitPath:           "/.dockerinit",
+			WorkingDir:         c.Config.WorkingDir,
+			Network:            en,
+			Ipc:                ipc,
+			Pid:                pid,
+			Resources:          resources,
+			AllowedDevices:     allowedDevices,
+			AutoCreatedDevices: autoCreatedDevices,
+			CapAdd:             c.hostConfig.CapAdd,
+			CapDrop:            c.hostConfig.CapDrop,
+			ProcessConfig:      processConfig,
+			ProcessLabel:       c.GetProcessLabel(),
+			MountLabel:         c.GetMountLabel(),
+			LxcConfig:          lxcConfig,
+			AppArmorProfile:    c.AppArmorProfile,
+		}
 	}
 
 	return nil
