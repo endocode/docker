@@ -1,6 +1,8 @@
 package graph
 
 import (
+	"crypto/sha512"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -20,6 +22,8 @@ import (
 	"github.com/docker/docker/pkg/truncindex"
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/docker/utils"
+	"github.com/docker/docker/vendor/src/code.google.com/p/go/src/pkg/archive/tar"
+	"github.com/appc/spec/schema"
 )
 
 // A Graph is a store for versioned filesystem images and the relationship between them.
@@ -136,6 +140,227 @@ func (graph *Graph) Create(layerData archive.ArchiveReader, containerID, contain
 		return nil, err
 	}
 	return img, nil
+}
+
+func (graph *Graph) RegisterACI(aci io.Reader) error {
+	tmp, err := graph.Mktemp("")
+	defer os.RemoveAll(tmp)
+	if err != nil {
+		return err
+	}
+
+	id, err := untarACI(tmp, aci)
+	if err != nil {
+		return err
+	}
+	layerFile, err := createLayerTar(tmp)
+	if err != nil {
+		return err
+	}
+	defer layerFile.Close()
+	if err := os.RemoveAll(path.Join(tmp, "rootfs")); err != nil {
+		return err
+	}
+
+	// empty string means no parent
+	if err := graph.driver.Create(id, ""); err != nil {
+		return err
+	}
+	if _, err := graph.driver.ApplyDiff(id, "", archive.ArchiveReader(layerFile)); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, graph.ImageRoot(id)); err != nil {
+		return err
+	}
+	graph.idIndex.Add(id)
+
+	return nil
+}
+
+type DeleteOnClose struct {
+	file     *os.File
+	filename string
+}
+
+func (doc *DeleteOnClose) Read(p []byte) (int, error) {
+	return doc.file.Read(p)
+}
+
+func (doc *DeleteOnClose) Close() error {
+	if err := doc.file.Close(); err != nil {
+		return err
+	}
+	if err := os.Remove(doc.filename); err != nil {
+		return err
+	}
+	return nil
+}
+
+// storeDecompressed stores the aci on disk as uncompressed tar,
+// returns a reader to it and its sha512sum.
+func storeDecompressed(target string, aci io.Reader) (io.ReadCloser, string, error) {
+	decompressed, err := archive.DecompressStream(aci)
+	if err != nil {
+		return nil, "", err
+	}
+	defer decompressed.Close()
+
+	hasher := sha512.New()
+	teeReader := io.TeeReader(decompressed, hasher)
+	aciFilename := path.Join(target, "aci.tar")
+	tarFile, err := os.Create(aciFilename)
+
+	if err != nil {
+		return nil, "", err
+	}
+	_, err = io.Copy(tarFile, teeReader)
+	if err != nil {
+		return nil, "", err
+	}
+	if _, err := tarFile.Seek(0, 0); err != nil {
+		return nil, "", err
+	}
+
+	doc := &DeleteOnClose{file: tarFile, filename: aciFilename}
+	return doc, fmt.Sprintf("%x", hasher.Sum(nil)), nil
+}
+
+// validateUntarredACI checks if manifest is a file and a proper ACI
+// manifest and tests if rootfs directory exists.
+func validateUntarredACI(target string) error {
+	manifestPath := path.Join(target, "manifest")
+	fi, err := os.Lstat(manifestPath)
+	if err != nil {
+		return err
+	}
+
+	if !fi.Mode().IsRegular() {
+		return errors.New("invalid ACI - manifest should be a file")
+	}
+	imageManifest := &schema.ImageManifest{}
+	jsonBytes, err := ioutil.ReadFile(manifestPath)
+	if err != nil {
+		return err
+	}
+	if err := imageManifest.UnmarshalJSON(jsonBytes); err != nil {
+		return err
+	}
+
+	rootfsPath := path.Join(target, "rootfs")
+	fi, err = os.Lstat(rootfsPath)
+	if err != nil {
+		return err
+	}
+	if !fi.Mode().IsDir() {
+		return errors.New("invalid ACI - rootfs should be a directory")
+	}
+
+	return nil
+}
+
+func untarACI(target string, aci io.Reader) (string, error) {
+	tarFile, hash, err := storeDecompressed(target, aci)
+	if err != nil {
+		return "", nil
+	}
+	defer tarFile.Close()
+
+	tarReader := tar.NewReader(tarFile)
+	for {
+		header, err := tarReader.Next()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return "", err
+		}
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := writeADir(target, header); err != nil {
+				return "", err
+			}
+		case tar.TypeReg:
+			if err := writeAFile(target, header, tarReader); err != nil {
+				return "", err
+			}
+		}
+	}
+
+	if err := validateUntarredACI(target); err != nil {
+		return "", err
+	}
+
+	return hash, nil
+}
+
+func writeADir(target string, header *tar.Header) error {
+	dir := path.Join(target, header.Name)
+	return os.MkdirAll(dir, os.FileMode(header.Mode))
+}
+
+func writeAFile(target string, header *tar.Header, reader io.Reader) error {
+	filename := path.Join(target, header.Name)
+	writer, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer writer.Close()
+	_, err = io.Copy(writer, reader)
+	if err != nil {
+		return err
+	}
+	return os.Chmod(filename, os.FileMode(header.Mode))
+}
+
+type tarPacker struct {
+	writer *tar.Writer
+	root   string
+}
+
+func (packer *tarPacker) Pack() error {
+	return filepath.Walk(packer.root, packer.walkAndPack)
+}
+
+func (packer *tarPacker) walkAndPack(path string, info os.FileInfo, err error) error {
+	if err != nil {
+		return err
+	}
+	if info.Mode().IsDir() {
+		return nil
+	}
+	newPath := path[len(packer.root):]
+	// TODO: handle symlinks
+	header, ferr := tar.FileInfoHeader(info, newPath)
+	if ferr != nil {
+		return ferr
+	}
+	header.Name = newPath
+	if ferr := packer.writer.WriteHeader(header); ferr != nil {
+		return ferr
+	}
+	f, ferr := os.Open(path)
+	if ferr != nil {
+		return ferr
+	}
+	if _, ferr := io.Copy(packer.writer, f); ferr != nil {
+		return ferr
+	}
+	return nil
+}
+
+func createLayerTar(target string) (archive.Archive, error) {
+	layerFile, err := os.Create(path.Join(target, "layer.tar"))
+	if err != nil {
+		return nil, err
+	}
+	defer layerFile.Close()
+	tarWriter := tar.NewWriter(layerFile)
+	rootfsPath := path.Join(target, "rootfs")
+	packer := &tarPacker{tarWriter, rootfsPath}
+	if err := packer.Pack(); err != nil {
+		return nil, err
+	}
+	return archive.Archive(layerFile), nil
 }
 
 // Register imports a pre-existing image into the graph.
