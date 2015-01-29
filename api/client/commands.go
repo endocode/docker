@@ -2040,17 +2040,29 @@ func (cli *DockerCli) CmdTag(args ...string) error {
 	return nil
 }
 
-func (cli *DockerCli) pullImage(image string) error {
-	return cli.pullImageCustomOut(image, cli.out)
+func (cli *DockerCli) pullImage(config *runconfig.Config) error {
+	return cli.pullImageCustomOut(config, cli.out)
 }
 
-func (cli *DockerCli) pullImageCustomOut(image string, out io.Writer) error {
+func (cli *DockerCli) pullImageCustomOut(config *runconfig.Config, out io.Writer) error {
+	switch config.Format {
+	case "docker":
+		return cli.pullDockerImageCustomOut(config.Image, out)
+	case "aci":
+		return cli.pullACIImageCustomOut(config.Image, out)
+	default:
+		return fmt.Errorf("unknown format: %s", config.Format)
+	}
+}
+
+func (cli *DockerCli) pullDockerImageCustomOut(image string, out io.Writer) error {
 	v := url.Values{}
 	repos, tag := parsers.ParseRepositoryTag(image)
 	// pull only the image tagged 'latest' if no tag was specified
 	if tag == "" {
 		tag = graph.DEFAULTTAG
 	}
+	v.Set("format", "docker")
 	v.Set("fromImage", repos)
 	v.Set("tag", tag)
 
@@ -2074,6 +2086,17 @@ func (cli *DockerCli) pullImageCustomOut(image string, out io.Writer) error {
 		base64.URLEncoding.EncodeToString(buf),
 	}
 	if err = cli.stream("POST", "/images/create?"+v.Encode(), nil, out, map[string][]string{"X-Registry-Auth": registryAuthHeader}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (cli *DockerCli) pullACIImageCustomOut(image string, out io.Writer) error {
+	v := url.Values{}
+	v.Set("format", "aci")
+	v.Set("url", image)
+
+	if err := cli.stream("POST", "/images/create?"+v.Encode(), nil, out, nil); err != nil {
 		return err
 	}
 	return nil
@@ -2146,7 +2169,7 @@ func (cli *DockerCli) createContainer(config *runconfig.Config, hostConfig *runc
 		fmt.Fprintf(cli.err, "Unable to find image '%s:%s' locally\n", repo, tag)
 
 		// we don't want to write to stdout anything apart from container.ID
-		if err = cli.pullImageCustomOut(config.Image, cli.err); err != nil {
+		if err = cli.pullImageCustomOut(config, cli.err); err != nil {
 			return nil, err
 		}
 		// Retry

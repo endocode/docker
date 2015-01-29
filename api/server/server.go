@@ -6,6 +6,7 @@ import (
 
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"expvar"
 	"fmt"
 	"io"
@@ -534,6 +535,18 @@ func postImagesCreate(eng *engine.Engine, version version.Version, w http.Respon
 		return err
 	}
 
+	format := r.Form.Get("format")
+	switch format {
+	case "docker":
+		return postImagesCreateDocker(eng, version, w, r, vars)
+	case "aci":
+		return postImagesCreateACI(eng, version, w, r, vars)
+	default:
+		return fmt.Errorf("invalid image format: %s", format)
+	}
+}
+
+func postImagesCreateDocker(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	var (
 		image = r.Form.Get("fromImage")
 		repo  = r.Form.Get("repo")
@@ -560,7 +573,7 @@ func postImagesCreate(eng *engine.Engine, version version.Version, w http.Respon
 				metaHeaders[k] = v
 			}
 		}
-		job = eng.Job("pull", image, tag)
+		job = eng.Job("pull", "docker", image, tag)
 		job.SetenvBool("parallel", version.GreaterThan("1.3"))
 		job.SetenvJson("metaHeaders", metaHeaders)
 		job.SetenvJson("authConfig", authConfig)
@@ -583,6 +596,30 @@ func postImagesCreate(eng *engine.Engine, version version.Version, w http.Respon
 			return err
 		}
 		sf := utils.NewStreamFormatter(version.GreaterThan("1.0"))
+		w.Write(sf.FormatError(err))
+	}
+
+	return nil
+}
+
+func postImagesCreateACI(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	var (
+		image = r.Form.Get("url")
+		job   *engine.Job
+	)
+	if image != "" { //pull
+		job = eng.Job("pull", "aci", image)
+	} else { //import
+		return errors.New("creating ACI image from tarball is not implemented")
+	}
+
+	job.SetenvBool("json", true)
+	streamJSON(job, w, true)
+	if err := job.Run(); err != nil {
+		if !job.Stdout.Used() {
+			return err
+		}
+		sf := utils.NewStreamFormatter(true)
 		w.Write(sf.FormatError(err))
 	}
 
