@@ -314,7 +314,7 @@ func populateCommand(c *Container, env []string) error {
 
 	processConfig.Env = env
 	if c.aci {
-		processConfig.Entrypoint = m.App.Exec[0]
+		processConfig.Entrypoint = strings.Join(m.App.Exec, " ")
 
 		c.command = &execdriver.Command{
 			ID:                 c.ID,
