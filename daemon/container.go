@@ -312,7 +312,7 @@ func populateCommand(c *Container, env []string) error {
 
 	processConfig.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 
-	processConfig.Env = env
+	processConfig.Env = append(env, "DEBUGS="+c.root+" ## "+c.basefs)
 	if c.aci {
 		processConfig.Entrypoint = strings.Join(m.App.Exec, " ")
 
