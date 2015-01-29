@@ -319,7 +319,7 @@ func populateCommand(c *Container, env []string) error {
 		c.command = &execdriver.Command{
 			ID:                 c.ID,
 			Rootfs:             env2.Get("ACI_ROOTFS"),
-			ReadonlyRootfs:     c.hostConfig.ReadonlyRootfs,
+			ReadonlyRootfs:     false,
 			InitPath:           "/.dockerinit",
 			WorkingDir:         c.Config.WorkingDir,
 			Network:            en,
