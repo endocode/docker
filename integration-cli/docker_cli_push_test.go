@@ -2,10 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/docker/docker/vendor/src/code.google.com/p/go/src/pkg/archive/tar"
 )
 
 // pulling an image from the central registry should work
@@ -41,7 +45,7 @@ func TestPushUntagged(t *testing.T) {
 
 	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
 
-	expected := "does not exist"
+	expected := "No tags to push"
 	pushCmd := exec.Command(dockerBinary, "push", repoName)
 	if out, _, err := runCommandWithOutput(pushCmd); err == nil {
 		t.Fatalf("pushing the image to the private registry should have failed: outuput %q", out)
@@ -49,6 +53,46 @@ func TestPushUntagged(t *testing.T) {
 		t.Fatalf("pushing the image failed with an unexpected message: expected %q, got %q", expected, out)
 	}
 	logDone("push - untagged image")
+}
+
+func TestPushBadTag(t *testing.T) {
+	defer setupRegistry(t)()
+
+	repoName := fmt.Sprintf("%v/dockercli/busybox:latest", privateRegistryURL)
+
+	expected := "does not exist"
+	pushCmd := exec.Command(dockerBinary, "push", repoName)
+	if out, _, err := runCommandWithOutput(pushCmd); err == nil {
+		t.Fatalf("pushing the image to the private registry should have failed: outuput %q", out)
+	} else if !strings.Contains(out, expected) {
+		t.Fatalf("pushing the image failed with an unexpected message: expected %q, got %q", expected, out)
+	}
+	logDone("push - image with bad tag")
+}
+
+func TestPushMultipleTags(t *testing.T) {
+	defer setupRegistry(t)()
+
+	repoName := fmt.Sprintf("%v/dockercli/busybox", privateRegistryURL)
+	repoTag1 := fmt.Sprintf("%v/dockercli/busybox:t1", privateRegistryURL)
+	repoTag2 := fmt.Sprintf("%v/dockercli/busybox:t2", privateRegistryURL)
+	// tag the image to upload it tot he private registry
+	tagCmd1 := exec.Command(dockerBinary, "tag", "busybox", repoTag1)
+	if out, _, err := runCommandWithOutput(tagCmd1); err != nil {
+		t.Fatalf("image tagging failed: %s, %v", out, err)
+	}
+	defer deleteImages(repoTag1)
+	tagCmd2 := exec.Command(dockerBinary, "tag", "busybox", repoTag2)
+	if out, _, err := runCommandWithOutput(tagCmd2); err != nil {
+		t.Fatalf("image tagging failed: %s, %v", out, err)
+	}
+	defer deleteImages(repoTag2)
+
+	pushCmd := exec.Command(dockerBinary, "push", repoName)
+	if out, _, err := runCommandWithOutput(pushCmd); err != nil {
+		t.Fatalf("pushing the image to the private registry has failed: %s, %v", out, err)
+	}
+	logDone("push - multiple tags to private registry")
 }
 
 func TestPushInterrupt(t *testing.T) {
@@ -79,4 +123,36 @@ func TestPushInterrupt(t *testing.T) {
 	}
 
 	logDone("push - interrupted")
+}
+
+func TestPushEmptyLayer(t *testing.T) {
+	defer setupRegistry(t)()
+	repoName := fmt.Sprintf("%v/dockercli/emptylayer", privateRegistryURL)
+	emptyTarball, err := ioutil.TempFile("", "empty_tarball")
+	if err != nil {
+		t.Fatalf("Unable to create test file: %v", err)
+	}
+	tw := tar.NewWriter(emptyTarball)
+	err = tw.Close()
+	if err != nil {
+		t.Fatalf("Error creating empty tarball: %v", err)
+	}
+	freader, err := os.Open(emptyTarball.Name())
+	if err != nil {
+		t.Fatalf("Could not open test tarball: %v", err)
+	}
+
+	importCmd := exec.Command(dockerBinary, "import", "-", repoName)
+	importCmd.Stdin = freader
+	out, _, err := runCommandWithOutput(importCmd)
+	if err != nil {
+		t.Errorf("import failed with errors: %v, output: %q", err, out)
+	}
+
+	// Now verify we can push it
+	pushCmd := exec.Command(dockerBinary, "push", repoName)
+	if out, _, err := runCommandWithOutput(pushCmd); err != nil {
+		t.Fatalf("pushing the image to the private registry has failed: %s, %v", out, err)
+	}
+	logDone("push - empty layer config to private registry")
 }

@@ -57,6 +57,8 @@ clone git github.com/Sirupsen/logrus v0.6.0
 
 clone git github.com/go-fsnotify/fsnotify v1.0.4
 
+clone git github.com/appc/spec master v0.2.0
+
 # get Go tip's archive/tar, for xattr support and improved performance
 # TODO after Go 1.4 drops, bump our minimum supported version and drop this vendored dep
 if [ "$1" = '--go' ]; then
@@ -68,7 +70,8 @@ if [ "$1" = '--go' ]; then
 	mv tmp-tar src/code.google.com/p/go/src/pkg/archive/tar
 fi
 
-clone git github.com/docker/libcontainer eb74393a3d2daeafbef4f5f27c0821cbdd67559c
+# this commit is from docker_1.5 branch in libcontainer, pls delete that branch when you'll update libcontainer again
+clone git github.com/docker/libcontainer 2d3b5af7486f1a4e80a5ed91859d309b4eebf80c
 # see src/github.com/docker/libcontainer/update-vendor.sh which is the "source of truth" for libcontainer deps (just like this file)
 rm -rf src/github.com/docker/libcontainer/vendor
 eval "$(grep '^clone ' src/github.com/docker/libcontainer/update-vendor.sh | grep -v 'github.com/codegangsta/cli')"

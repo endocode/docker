@@ -84,8 +84,10 @@ RUN cd /usr/local/go/src && ./make.bash --no-clean 2>&1
 ENV DOCKER_CROSSPLATFORMS \
 	linux/386 linux/arm \
 	darwin/amd64 darwin/386 \
-	freebsd/amd64 freebsd/386 freebsd/arm \
-	windows/amd64 windows/386
+	freebsd/amd64 freebsd/386 freebsd/arm
+
+# TODO when https://jenkins.dockerproject.com/job/Windows/ is green, add windows back to the list above
+#	windows/amd64 windows/386
 
 # (set an explicit GOARM of 5 for maximum compatibility)
 ENV GOARM 5
@@ -149,9 +151,13 @@ ENV DOCKER_BUILDTAGS apparmor selinux btrfs_noversion
 COPY vendor /go/src/github.com/docker/docker/vendor
 # (copy vendor/ because go-md2man needs golang.org/x/net)
 RUN set -x \
-	&& git clone -b v1 https://github.com/cpuguy83/go-md2man.git /go/src/github.com/cpuguy83/go-md2man \
+	&& git clone -b v1.0.1 https://github.com/cpuguy83/go-md2man.git /go/src/github.com/cpuguy83/go-md2man \
 	&& git clone -b v1.2 https://github.com/russross/blackfriday.git /go/src/github.com/russross/blackfriday \
 	&& go install -v github.com/cpuguy83/go-md2man
+
+# install toml validator
+RUN git clone -b v0.1.0 https://github.com/BurntSushi/toml.git /go/src/github.com/BurntSushi/toml \
+    && go install -v github.com/BurntSushi/toml/cmd/tomlv
 
 # Wrap all commands in the "docker-in-docker" script to allow nested containers
 ENTRYPOINT ["hack/dind"]

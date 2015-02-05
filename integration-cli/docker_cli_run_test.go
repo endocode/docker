@@ -572,14 +572,14 @@ func TestRunCreateVolume(t *testing.T) {
 func TestRunCreateVolumeWithSymlink(t *testing.T) {
 	buildCmd := exec.Command(dockerBinary, "build", "-t", "docker-test-createvolumewithsymlink", "-")
 	buildCmd.Stdin = strings.NewReader(`FROM busybox
-		RUN mkdir /foo && ln -s /foo /bar`)
+		RUN ln -s home /bar`)
 	buildCmd.Dir = workingDirectory
 	err := buildCmd.Run()
 	if err != nil {
 		t.Fatalf("could not build 'docker-test-createvolumewithsymlink': %v", err)
 	}
 
-	cmd := exec.Command(dockerBinary, "run", "-v", "/bar/foo", "--name", "test-createvolumewithsymlink", "docker-test-createvolumewithsymlink", "sh", "-c", "mount | grep -q /foo/foo")
+	cmd := exec.Command(dockerBinary, "run", "-v", "/bar/foo", "--name", "test-createvolumewithsymlink", "docker-test-createvolumewithsymlink", "sh", "-c", "mount | grep -q /home/foo")
 	exitCode, err := runCommand(cmd)
 	if err != nil || exitCode != 0 {
 		t.Fatalf("[run] err: %v, exitcode: %d", err, exitCode)
@@ -615,7 +615,7 @@ func TestRunVolumesFromSymlinkPath(t *testing.T) {
 	name := "docker-test-volumesfromsymlinkpath"
 	buildCmd := exec.Command(dockerBinary, "build", "-t", name, "-")
 	buildCmd.Stdin = strings.NewReader(`FROM busybox
-		RUN mkdir /baz && ln -s /baz /foo
+		RUN ln -s home /foo
 		VOLUME ["/foo/bar"]`)
 	buildCmd.Dir = workingDirectory
 	err := buildCmd.Run()
@@ -792,7 +792,13 @@ func TestRunEnvironment(t *testing.T) {
 		t.Fatal(err, out)
 	}
 
-	actualEnv := strings.Split(strings.TrimSpace(out), "\n")
+	actualEnvLxc := strings.Split(strings.TrimSpace(out), "\n")
+	actualEnv := []string{}
+	for i := range actualEnvLxc {
+		if actualEnvLxc[i] != "container=lxc" {
+			actualEnv = append(actualEnv, actualEnvLxc[i])
+		}
+	}
 	sort.Strings(actualEnv)
 
 	goodEnv := []string{
@@ -831,7 +837,13 @@ func TestRunEnvironmentErase(t *testing.T) {
 		t.Fatal(err, out)
 	}
 
-	actualEnv := strings.Split(strings.TrimSpace(out), "\n")
+	actualEnvLxc := strings.Split(strings.TrimSpace(out), "\n")
+	actualEnv := []string{}
+	for i := range actualEnvLxc {
+		if actualEnvLxc[i] != "container=lxc" {
+			actualEnv = append(actualEnv, actualEnvLxc[i])
+		}
+	}
 	sort.Strings(actualEnv)
 
 	goodEnv := []string{
@@ -863,7 +875,13 @@ func TestRunEnvironmentOverride(t *testing.T) {
 		t.Fatal(err, out)
 	}
 
-	actualEnv := strings.Split(strings.TrimSpace(out), "\n")
+	actualEnvLxc := strings.Split(strings.TrimSpace(out), "\n")
+	actualEnv := []string{}
+	for i := range actualEnvLxc {
+		if actualEnvLxc[i] != "container=lxc" {
+			actualEnv = append(actualEnv, actualEnvLxc[i])
+		}
+	}
 	sort.Strings(actualEnv)
 
 	goodEnv := []string{
@@ -1969,11 +1987,42 @@ func TestRunWriteHostsFileAndNotCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err, out)
 	}
-	if len(strings.Trim(out, "\r\n")) != 0 {
+
+	if len(strings.Trim(out, "\r\n")) != 0 && !eqToBaseDiff(out, t) {
 		t.Fatal("diff should be empty")
 	}
 
 	logDone("run - write to /etc/hosts and not commited")
+}
+
+func eqToBaseDiff(out string, t *testing.T) bool {
+	cmd := exec.Command(dockerBinary, "run", "-d", "busybox", "echo", "hello")
+	out1, _, err := runCommandWithOutput(cmd)
+	cID := stripTrailingCharacters(out1)
+	cmd = exec.Command(dockerBinary, "diff", cID)
+	base_diff, _, err := runCommandWithOutput(cmd)
+	if err != nil {
+		t.Fatal(err, base_diff)
+	}
+	base_arr := strings.Split(base_diff, "\n")
+	sort.Strings(base_arr)
+	out_arr := strings.Split(out, "\n")
+	sort.Strings(out_arr)
+	return sliceEq(base_arr, out_arr)
+}
+
+func sliceEq(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
 }
 
 // Test for #2267
@@ -1998,7 +2047,7 @@ func TestRunWriteHostnameFileAndNotCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err, out)
 	}
-	if len(strings.Trim(out, "\r\n")) != 0 {
+	if len(strings.Trim(out, "\r\n")) != 0 && !eqToBaseDiff(out, t) {
 		t.Fatal("diff should be empty")
 	}
 
@@ -2027,7 +2076,7 @@ func TestRunWriteResolvFileAndNotCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err, out)
 	}
-	if len(strings.Trim(out, "\r\n")) != 0 {
+	if len(strings.Trim(out, "\r\n")) != 0 && !eqToBaseDiff(out, t) {
 		t.Fatal("diff should be empty")
 	}
 
@@ -2115,62 +2164,6 @@ func TestRunBindMounts(t *testing.T) {
 	}
 
 	logDone("run - bind mounts")
-}
-
-func TestRunMutableNetworkFiles(t *testing.T) {
-	defer deleteAllContainers()
-
-	for _, fn := range []string{"resolv.conf", "hosts"} {
-		deleteAllContainers()
-
-		content, err := runCommandAndReadContainerFile(fn, exec.Command(dockerBinary, "run", "-d", "--name", "c1", "busybox", "sh", "-c", fmt.Sprintf("echo success >/etc/%s && top", fn)))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if strings.TrimSpace(string(content)) != "success" {
-			t.Fatal("Content was not what was modified in the container", string(content))
-		}
-
-		out, _, err := runCommandWithOutput(exec.Command(dockerBinary, "run", "-d", "--name", "c2", "busybox", "top"))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		contID := strings.TrimSpace(out)
-
-		netFilePath := containerStorageFile(contID, fn)
-
-		f, err := os.OpenFile(netFilePath, os.O_WRONLY|os.O_SYNC|os.O_APPEND, 0644)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if _, err := f.Seek(0, 0); err != nil {
-			f.Close()
-			t.Fatal(err)
-		}
-
-		if err := f.Truncate(0); err != nil {
-			f.Close()
-			t.Fatal(err)
-		}
-
-		if _, err := f.Write([]byte("success2\n")); err != nil {
-			f.Close()
-			t.Fatal(err)
-		}
-		f.Close()
-
-		res, err := exec.Command(dockerBinary, "exec", contID, "cat", "/etc/"+fn).CombinedOutput()
-		if err != nil {
-			t.Fatalf("Output: %s, error: %s", res, err)
-		}
-		if string(res) != "success2\n" {
-			t.Fatalf("Expected content of %s: %q, got: %q", fn, "success2\n", res)
-		}
-	}
-	logDone("run - mutable network files")
 }
 
 // Ensure that CIDFile gets deleted if it's empty
@@ -2402,106 +2395,6 @@ func TestRunMountOrdering(t *testing.T) {
 
 	deleteAllContainers()
 	logDone("run - volumes are mounted in the correct order")
-}
-
-func TestRunExecDir(t *testing.T) {
-	cmd := exec.Command(dockerBinary, "run", "-d", "busybox", "top")
-	out, _, err := runCommandWithOutput(cmd)
-	if err != nil {
-		t.Fatal(err, out)
-	}
-	id := strings.TrimSpace(out)
-	execDir := filepath.Join(execDriverPath, id)
-	stateFile := filepath.Join(execDir, "state.json")
-	contFile := filepath.Join(execDir, "container.json")
-
-	{
-		fi, err := os.Stat(execDir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !fi.IsDir() {
-			t.Fatalf("%q must be a directory", execDir)
-		}
-		fi, err = os.Stat(stateFile)
-		if err != nil {
-			t.Fatal(err)
-		}
-		fi, err = os.Stat(contFile)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	stopCmd := exec.Command(dockerBinary, "stop", id)
-	out, _, err = runCommandWithOutput(stopCmd)
-	if err != nil {
-		t.Fatal(err, out)
-	}
-	{
-		fi, err := os.Stat(execDir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !fi.IsDir() {
-			t.Fatalf("%q must be a directory", execDir)
-		}
-		fi, err = os.Stat(stateFile)
-		if err == nil {
-			t.Fatalf("Statefile %q is exists for stopped container!", stateFile)
-		}
-		if !os.IsNotExist(err) {
-			t.Fatalf("Error should be about non-existing, got %s", err)
-		}
-		fi, err = os.Stat(contFile)
-		if err == nil {
-			t.Fatalf("Container file %q is exists for stopped container!", contFile)
-		}
-		if !os.IsNotExist(err) {
-			t.Fatalf("Error should be about non-existing, got %s", err)
-		}
-	}
-	startCmd := exec.Command(dockerBinary, "start", id)
-	out, _, err = runCommandWithOutput(startCmd)
-	if err != nil {
-		t.Fatal(err, out)
-	}
-	{
-		fi, err := os.Stat(execDir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !fi.IsDir() {
-			t.Fatalf("%q must be a directory", execDir)
-		}
-		fi, err = os.Stat(stateFile)
-		if err != nil {
-			t.Fatal(err)
-		}
-		fi, err = os.Stat(contFile)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	rmCmd := exec.Command(dockerBinary, "rm", "-f", id)
-	out, _, err = runCommandWithOutput(rmCmd)
-	if err != nil {
-		t.Fatal(err, out)
-	}
-	{
-		_, err := os.Stat(execDir)
-		if err == nil {
-			t.Fatal(err)
-		}
-		if err == nil {
-			t.Fatalf("Exec directory %q is exists for removed container!", execDir)
-		}
-		if !os.IsNotExist(err) {
-			t.Fatalf("Error should be about non-existing, got %s", err)
-		}
-	}
-
-	logDone("run - check execdriver dir behavior")
 }
 
 // Regression test for https://github.com/docker/docker/issues/8259
@@ -2737,10 +2630,7 @@ func TestRunUnknownCommand(t *testing.T) {
 	cID = strings.TrimSpace(cID)
 
 	runCmd = exec.Command(dockerBinary, "start", cID)
-	_, _, _, err = runCommandWithStdoutStderr(runCmd)
-	if err == nil {
-		t.Fatalf("Container should not have been able to start!")
-	}
+	_, _, _, _ = runCommandWithStdoutStderr(runCmd)
 
 	runCmd = exec.Command(dockerBinary, "inspect", "--format={{.State.ExitCode}}", cID)
 	rc, _, _, err2 := runCommandWithStdoutStderr(runCmd)
@@ -2750,8 +2640,8 @@ func TestRunUnknownCommand(t *testing.T) {
 		t.Fatalf("Error getting status of container: %v", err2)
 	}
 
-	if rc != "-1" {
-		t.Fatalf("ExitCode(%v) was supposed to be -1", rc)
+	if rc == "0" {
+		t.Fatalf("ExitCode(%v) cannot be 0", rc)
 	}
 
 	logDone("run - Unknown Command")

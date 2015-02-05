@@ -15,6 +15,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/appc/spec/schema"
 	"github.com/docker/docker/daemon/graphdriver"
 	"github.com/docker/docker/dockerversion"
 	"github.com/docker/docker/image"
@@ -23,7 +24,6 @@ import (
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/docker/utils"
 	"github.com/docker/docker/vendor/src/code.google.com/p/go/src/pkg/archive/tar"
-	"github.com/appc/spec/schema"
 )
 
 // A Graph is a store for versioned filesystem images and the relationship between them.
@@ -366,13 +366,13 @@ func createLayerTar(target string) (archive.Archive, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer layerFile.Close()
 	tarWriter := tar.NewWriter(layerFile)
 	rootfsPath := path.Join(target, "rootfs")
 	packer := &tarPacker{tarWriter, rootfsPath}
 	if err := packer.Pack(); err != nil {
 		return nil, err
 	}
+	layerFile.Seek(0, 0)
 	return archive.Archive(layerFile), nil
 }
 
@@ -459,6 +459,28 @@ func (graph *Graph) Mktemp(id string) (string, error) {
 		return "", err
 	}
 	return dir, nil
+}
+
+func (graph *Graph) newTempFile() (*os.File, error) {
+	tmp, err := graph.Mktemp("")
+	if err != nil {
+		return nil, err
+	}
+	return ioutil.TempFile(tmp, "")
+}
+
+func bufferToFile(f *os.File, src io.Reader) (int64, error) {
+	n, err := io.Copy(f, src)
+	if err != nil {
+		return n, err
+	}
+	if err = f.Sync(); err != nil {
+		return n, err
+	}
+	if _, err := f.Seek(0, 0); err != nil {
+		return n, err
+	}
+	return n, nil
 }
 
 // setupInitLayer populates a directory with mountpoints suitable

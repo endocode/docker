@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -243,6 +245,18 @@ func assertContainerList(out string, expected []string) bool {
 }
 
 func TestPsListContainersSize(t *testing.T) {
+	cmd := exec.Command(dockerBinary, "run", "-d", "busybox", "echo", "hello")
+	runCommandWithOutput(cmd)
+	cmd = exec.Command(dockerBinary, "ps", "-s", "-n=1")
+	base_out, _, err := runCommandWithOutput(cmd)
+	base_lines := strings.Split(strings.Trim(base_out, "\n "), "\n")
+	base_sizeIndex := strings.Index(base_lines[0], "SIZE")
+	base_foundSize := base_lines[1][base_sizeIndex:]
+	base_bytes, err := strconv.Atoi(strings.Split(base_foundSize, " ")[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	name := "test_size"
 	runCmd := exec.Command(dockerBinary, "run", "--name", name, "busybox", "sh", "-c", "echo 1 > test")
 	out, _, err := runCommandWithOutput(runCmd)
@@ -275,7 +289,7 @@ func TestPsListContainersSize(t *testing.T) {
 	if foundID != id[:12] {
 		t.Fatalf("Expected id %s, got %s", id[:12], foundID)
 	}
-	expectedSize := "2 B"
+	expectedSize := fmt.Sprintf("%d B", (2 + base_bytes))
 	foundSize := lines[1][sizeIndex:]
 	if foundSize != expectedSize {
 		t.Fatalf("Expected size %q, got %q", expectedSize, foundSize)
@@ -288,7 +302,7 @@ func TestPsListContainersSize(t *testing.T) {
 func TestPsListContainersFilterStatus(t *testing.T) {
 	// FIXME: this should test paused, but it makes things hang and its wonky
 	// this is because paused containers can't be controlled by signals
-
+	deleteAllContainers()
 	// start exited container
 	runCmd := exec.Command(dockerBinary, "run", "-d", "busybox")
 	out, _, err := runCommandWithOutput(runCmd)
@@ -304,7 +318,7 @@ func TestPsListContainersFilterStatus(t *testing.T) {
 	}
 
 	// start running container
-	runCmd = exec.Command(dockerBinary, "run", "-d", "busybox", "sh", "-c", "sleep 360")
+	runCmd = exec.Command(dockerBinary, "run", "-itd", "busybox")
 	out, _, err = runCommandWithOutput(runCmd)
 	if err != nil {
 		t.Fatal(out, err)

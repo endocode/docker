@@ -80,7 +80,51 @@ func (daemon *Daemon) Create(config *runconfig.Config, hostConfig *runconfig.Hos
 }
 
 func (daemon *Daemon) CreateACIContainer(config *runconfig.Config, hostConfig *runconfig.HostConfig, name string) (*Container, []string, error) {
-	return nil, nil, fmt.Errorf("Not implemented")
+	var (
+		container *Container
+		warnings  []string
+		imgID     string
+		err       error
+	)
+
+	if warnings, err = daemon.mergeAndVerifyConfig(config, nil); err != nil {
+		return nil, nil, err
+	}
+
+	if container, err = daemon.newContainer(name, config, config.Format, imgID); err != nil {
+		return nil, nil, err
+	}
+
+	//debug
+	aciManifest, err := daemon.repositories.LookupACIImage(container.Name)
+	if err != nil {
+		return nil, nil, err
+	}
+	return nil, nil, fmt.Errorf("Name from the aci: %s", aciManifest.Name)
+
+	//
+	if err := daemon.Register(container); err != nil {
+		return nil, nil, err
+	}
+	if err := daemon.createRootfs(container); err != nil {
+		return nil, nil, err
+	}
+	if hostConfig != nil {
+		if err := daemon.setHostConfig(container, hostConfig); err != nil {
+			return nil, nil, err
+		}
+	}
+	if err := container.Mount(); err != nil {
+		return nil, nil, err
+	}
+	defer container.Unmount()
+	if err := container.prepareVolumes(); err != nil {
+		return nil, nil, err
+	}
+	if err := container.ToDisk(); err != nil {
+		return nil, nil, err
+	}
+	return container, warnings, nil
 }
 
 func (daemon *Daemon) CreateDockerContainer(config *runconfig.Config, hostConfig *runconfig.HostConfig, name string) (*Container, []string, error) {
@@ -112,7 +156,7 @@ func (daemon *Daemon) CreateDockerContainer(config *runconfig.Config, hostConfig
 			return nil, nil, err
 		}
 	}
-	if container, err = daemon.newContainer(name, config, imgID); err != nil {
+	if container, err = daemon.newContainer(name, config, config.Format, imgID); err != nil {
 		return nil, nil, err
 	}
 	if err := daemon.Register(container); err != nil {

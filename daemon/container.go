@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/appc/spec/schema"
+
 	"github.com/docker/libcontainer/devices"
 	"github.com/docker/libcontainer/label"
 
@@ -57,6 +59,9 @@ type Container struct {
 
 	ID string
 
+	ImgType     string
+	aciManifest schema.ImageManifest
+
 	Created time.Time
 
 	Path string
@@ -99,6 +104,26 @@ type Container struct {
 }
 
 func (container *Container) FromDisk() error {
+	// It might be an ACI image or a Docker image. If the manifest file exists,
+	// then it is an ACI image. Just load the manifest.
+	manifestPath, err := container.manifestPath()
+	if err != nil {
+		container.ImgType = "docker"
+	} else {
+		manifestSource, err := ioutil.ReadFile(manifestPath)
+		if err == nil {
+			container.ImgType = "aci"
+
+			container.aciManifest = schema.ImageManifest{}
+			err = container.aciManifest.UnmarshalJSON(manifestSource)
+			if err != nil {
+				return err
+			}
+		} else {
+			container.ImgType = "docker"
+		}
+	}
+
 	pth, err := container.jsonPath()
 	if err != nil {
 		return err
@@ -204,6 +229,24 @@ func (container *Container) getRootResourcePath(path string) (string, error) {
 }
 
 func populateCommand(c *Container, env []string) error {
+	//var env2 engine.Env
+	//var m schema.ImageManifest
+
+	//if c.aci {
+	//	env2 = env
+
+	//	b, err := ioutil.ReadFile(env2.Get("ACI_MANIFEST"))
+	//	if err != nil {
+	//		return err
+	//	}
+
+	//	m = schema.ImageManifest{}
+	//	err = m.UnmarshalJSON(b)
+	//	if err != nil {
+	//		return err
+	//	}
+	//}
+
 	en := &execdriver.Network{
 		Mtu:       c.daemon.config.Mtu,
 		Interface: nil,
@@ -290,27 +333,57 @@ func populateCommand(c *Container, env []string) error {
 	}
 
 	processConfig.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	processConfig.Env = env
 
-	c.command = &execdriver.Command{
-		ID:                 c.ID,
-		Rootfs:             c.RootfsPath(),
-		ReadonlyRootfs:     c.hostConfig.ReadonlyRootfs,
-		InitPath:           "/.dockerinit",
-		WorkingDir:         c.Config.WorkingDir,
-		Network:            en,
-		Ipc:                ipc,
-		Pid:                pid,
-		Resources:          resources,
-		AllowedDevices:     allowedDevices,
-		AutoCreatedDevices: autoCreatedDevices,
-		CapAdd:             c.hostConfig.CapAdd,
-		CapDrop:            c.hostConfig.CapDrop,
-		ProcessConfig:      processConfig,
-		ProcessLabel:       c.GetProcessLabel(),
-		MountLabel:         c.GetMountLabel(),
-		LxcConfig:          lxcConfig,
-		AppArmorProfile:    c.AppArmorProfile,
+	processConfig.Env = append(env, "DEBUGS="+c.root+" ## "+c.basefs)
+	switch c.ImgType {
+	case "aci":
+		processConfig.Entrypoint = c.aciManifest.App.Exec[0]
+		processConfig.Arguments = c.aciManifest.App.Exec[1:]
+		//processConfig.Cmd = strings.Join(c.aciManifest.App.Exec, " ")
+
+		c.command = &execdriver.Command{
+			ID:                 c.ID,
+			Rootfs:             c.RootfsPath(), //env2.Get("ACI_ROOTFS"),
+			ReadonlyRootfs:     false,
+			InitPath:           "/.dockerinit",
+			WorkingDir:         c.Config.WorkingDir,
+			Network:            en,
+			Ipc:                ipc,
+			Pid:                pid,
+			Resources:          resources,
+			AllowedDevices:     allowedDevices,
+			AutoCreatedDevices: autoCreatedDevices,
+			CapAdd:             c.hostConfig.CapAdd,
+			CapDrop:            c.hostConfig.CapDrop,
+			ProcessConfig:      processConfig,
+			ProcessLabel:       c.GetProcessLabel(),
+			MountLabel:         c.GetMountLabel(),
+			LxcConfig:          lxcConfig,
+			AppArmorProfile:    c.AppArmorProfile,
+		}
+	case "docker":
+		c.command = &execdriver.Command{
+			ID:                 c.ID,
+			Rootfs:             c.RootfsPath(),
+			ReadonlyRootfs:     c.hostConfig.ReadonlyRootfs,
+			InitPath:           "/.dockerinit",
+			WorkingDir:         c.Config.WorkingDir,
+			Network:            en,
+			Ipc:                ipc,
+			Pid:                pid,
+			Resources:          resources,
+			AllowedDevices:     allowedDevices,
+			AutoCreatedDevices: autoCreatedDevices,
+			CapAdd:             c.hostConfig.CapAdd,
+			CapDrop:            c.hostConfig.CapDrop,
+			ProcessConfig:      processConfig,
+			ProcessLabel:       c.GetProcessLabel(),
+			MountLabel:         c.GetMountLabel(),
+			LxcConfig:          lxcConfig,
+			AppArmorProfile:    c.AppArmorProfile,
+		}
+	default:
+		return fmt.Errorf("unknown image type: %s", c.ImgType)
 	}
 
 	return nil
@@ -324,7 +397,7 @@ func (container *Container) Start() (err error) {
 		return nil
 	}
 
-	// if we encounter and error during start we need to ensure that any other
+	// if we encounter an error during start we need to ensure that any other
 	// setup has been cleaned up properly
 	defer func() {
 		if err != nil {
@@ -835,8 +908,15 @@ func (container *Container) hostConfigPath() (string, error) {
 	return container.getRootResourcePath("hostconfig.json")
 }
 
+// Docker images have a config.json file
 func (container *Container) jsonPath() (string, error) {
 	return container.getRootResourcePath("config.json")
+}
+
+// ACI images have an Image Manifest defined by the App Container Specification
+// https://github.com/appc/spec/blob/master/SPEC.md
+func (container *Container) manifestPath() (string, error) {
+	return container.getRootResourcePath("manifest")
 }
 
 // This method must be exported to be used from the lxc template
