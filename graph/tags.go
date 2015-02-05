@@ -16,6 +16,7 @@ import (
 	"github.com/docker/docker/registry"
 	"github.com/docker/docker/utils"
 	"github.com/docker/libtrust"
+	"github.com/appc/spec/schema"
 )
 
 const DEFAULTTAG = "latest"
@@ -28,6 +29,7 @@ type TagStore struct {
 	path         string
 	graph        *Graph
 	Repositories map[string]Repository
+	ACIRepo      Repository
 	trustKey     libtrust.PrivateKey
 	sync.Mutex
 	// FIXME: move push/pull-related fields
@@ -67,6 +69,7 @@ func NewTagStore(path string, graph *Graph, key libtrust.PrivateKey) (*TagStore,
 		graph:        graph,
 		trustKey:     key,
 		Repositories: make(map[string]Repository),
+		ACIRepo:      make(Repository),
 		pullingPool:  make(map[string]chan struct{}),
 		pushingPool:  make(map[string]chan struct{}),
 	}
@@ -102,6 +105,20 @@ func (store *TagStore) reload() error {
 		return err
 	}
 	return nil
+}
+
+func (store *TagStore) LookupACIImage(name string) (*schema.ImageManifest, error) {
+	img, err := store.GetACIImage(name)
+	store.Lock()
+	defer store.Unlock()
+	if err != nil {
+		return nil, err
+	} else if img == nil {
+		if img, err = store.graph.GetACI(name); err != nil {
+			return nil, err
+		}
+	}
+	return img, nil
 }
 
 func (store *TagStore) LookupImage(name string) (*image.Image, error) {
@@ -200,6 +217,22 @@ func (store *TagStore) Delete(repoName, tag string) (bool, error) {
 	return deleted, store.save()
 }
 
+func (store *TagStore) SetACI(image *schema.ImageManifest, id string, force bool) error {
+	if _, err := store.LookupACIImage(id); err != nil {
+		return err
+	}
+	store.Lock()
+	defer store.Unlock()
+	if !force {
+		storedId, exists := store.ACIRepo[string(image.Name)]
+		if exists && storedId != id {
+			return fmt.Errorf("Image with name %s is already stored, but their ids differ: (stored)%s != (new)%s", image.Name, storedId, id)
+		}
+	}
+	store.ACIRepo[string(image.Name)] = id
+	return nil
+}
+
 func (store *TagStore) Set(repoName, tag, imageName string, force bool) error {
 	img, err := store.LookupImage(imageName)
 	store.Lock()
@@ -243,6 +276,15 @@ func (store *TagStore) Get(repoName string) (Repository, error) {
 	repoName = registry.NormalizeLocalName(repoName)
 	if r, exists := store.Repositories[repoName]; exists {
 		return r, nil
+	}
+	return nil, nil
+}
+
+func (store *TagStore) GetACIImage(name string) (*schema.ImageManifest, error) {
+	store.Lock()
+	defer store.Unlock()
+	if id, exists := store.ACIRepo[name]; exists {
+		return store.graph.GetACI(id)
 	}
 	return nil, nil
 }

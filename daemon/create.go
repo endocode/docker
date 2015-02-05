@@ -69,6 +69,21 @@ func (daemon *Daemon) ContainerCreate(job *engine.Job) engine.Status {
 
 // Create creates a new container from the given configuration with a given name.
 func (daemon *Daemon) Create(config *runconfig.Config, hostConfig *runconfig.HostConfig, name string) (*Container, []string, error) {
+	switch config.Format {
+	case "docker":
+		return daemon.CreateDockerContainer(config, hostConfig, name)
+	case "aci":
+		return daemon.CreateACIContainer(config, hostConfig, name)
+	default:
+		return nil, nil, fmt.Errorf("Invalid image format: %s", config.Format)
+	}
+}
+
+func (daemon *Daemon) CreateACIContainer(config *runconfig.Config, hostConfig *runconfig.HostConfig, name string) (*Container, []string, error) {
+	return nil, nil, fmt.Errorf("Not implemented")
+}
+
+func (daemon *Daemon) CreateDockerContainer(config *runconfig.Config, hostConfig *runconfig.HostConfig, name string) (*Container, []string, error) {
 	var (
 		container *Container
 		warnings  []string
