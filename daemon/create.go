@@ -112,7 +112,7 @@ func (daemon *Daemon) CreateDockerContainer(config *runconfig.Config, hostConfig
 			return nil, nil, err
 		}
 	}
-	if container, err = daemon.newContainer(name, config, imgID); err != nil {
+	if container, err = daemon.newContainer(name, config, config.Format, imgID); err != nil {
 		return nil, nil, err
 	}
 	if err := daemon.Register(container); err != nil {
