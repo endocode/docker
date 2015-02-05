@@ -50,38 +50,40 @@ func (s *TagStore) pullACIImage(job *engine.Job) engine.Status {
 		aci io.ReadCloser
 	)
 
-	img := job.Args[0]
 	u, err := url.Parse(img)
-	if err == nil && u.Scheme == "" {
+	if err != nil {
+		return job.Error(err)
+	}
+	switch u.Scheme {
+	case "":
 		app, err := newDiscoveryApp(img)
 		if err != nil {
 			return job.Error(err)
 		}
-		fmt.Printf("rkt: searching for app image %s\n", img)
 		ep, err := discovery.DiscoverEndpoints(*app, true)
 		if err != nil {
 			return job.Error(err)
 		}
-		aci, err = fetchImageFromEndpoints(ep)
+		image, err := fetchImageFromEndpoints(ep)
 		if err != nil {
 			return job.Error(err)
 		}
-	} else if err != nil {
-		return job.Errorf("not a valid URL (%s)", img)
-	} else if u.Scheme != "http" && u.Scheme != "https" {
-		return job.Errorf("invalid scheme for %s, only http or https are supported", img)
-	} else {
-		aci, err = downloadImage(u.String())
-	}
-	if err != nil {
-		return job.Error(err)
+		aci = image
+	case "http", "https", "file":
+		image, err := downloadImage(img)
+		if err != nil {
+			return job.Error(err)
+		}
+		aci = image
 	}
 	defer aci.Close()
 	return s.doStuffWithACI(job, aci)
 }
 
 func (s *TagStore) doStuffWithACI(job *engine.Job, aci io.ReadCloser) engine.Status {
-	if err := s.graph.RegisterACI(aci); err != nil {
+	if manifest, id, err := s.graph.RegisterACI(aci); err != nil {
+		return job.Error(err)
+	} else if err := s.SetACI(manifest, id); err != nil {
 		return job.Error(err)
 	}
 	return engine.StatusOK

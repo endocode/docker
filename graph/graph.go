@@ -88,6 +88,18 @@ func (graph *Graph) Exists(id string) bool {
 	return true
 }
 
+func (graph *Graph) LoadACIManifest(root string) (*schema.ImageManifest, error) {
+	return getManifestFromDir(root)
+}
+
+func (graph *Graph) GetACI(name string) (*schema.ImageManifest, error) {
+	id, err := graph.idIndex.Get(name)
+	if err != nil {
+		return nil, fmt.Errorf("could not find image: %v", err)
+	}
+	return graph.LoadACIManifest(graph.ImageRoot(id))
+}
+
 // Get returns the image with the given id, or an error if the image doesn't exist.
 func (graph *Graph) Get(name string) (*image.Image, error) {
 	id, err := graph.idIndex.Get(name)
@@ -142,39 +154,39 @@ func (graph *Graph) Create(layerData archive.ArchiveReader, containerID, contain
 	return img, nil
 }
 
-func (graph *Graph) RegisterACI(aci io.Reader) error {
+func (graph *Graph) RegisterACI(aci io.Reader) (*schema.ImageManifest, string, error) {
 	tmp, err := graph.Mktemp("")
-	defer os.RemoveAll(tmp)
 	if err != nil {
-		return err
+		return nil, "", err
 	}
+	defer os.RemoveAll(tmp)
 
-	id, err := untarACI(tmp, aci)
+	manifest, id, err := untarACI(tmp, aci)
 	if err != nil {
-		return err
+		return nil, "", err
 	}
 	layerFile, err := createLayerTar(tmp)
 	if err != nil {
-		return err
+		return nil, "", err
 	}
 	defer layerFile.Close()
 	if err := os.RemoveAll(path.Join(tmp, "rootfs")); err != nil {
-		return err
+		return nil, "", err
 	}
 
 	// empty string means no parent
 	if err := graph.driver.Create(id, ""); err != nil {
-		return err
+		return nil, "", err
 	}
 	if _, err := graph.driver.ApplyDiff(id, "", archive.ArchiveReader(layerFile)); err != nil {
-		return err
+		return nil, "", err
 	}
 	if err := os.Rename(tmp, graph.ImageRoot(id)); err != nil {
-		return err
+		return nil, "", err
 	}
 	graph.idIndex.Add(id)
 
-	return nil
+	return manifest, id, nil
 }
 
 type DeleteOnClose struct {
@@ -225,40 +237,39 @@ func storeDecompressed(target string, aci io.Reader) (io.ReadCloser, string, err
 	return doc, fmt.Sprintf("%x", hasher.Sum(nil)), nil
 }
 
+func getManifestFromDir(root string) (*schema.ImageManifest, error) {
+	manifest := &schema.ImageManifest{}
+	jsonBytes, err := ioutil.ReadFile(path.Join(root, "manifest"))
+	if err != nil {
+		return nil, err
+	}
+	if err := manifest.UnmarshalJSON(jsonBytes); err != nil {
+		return nil, err
+	}
+	return manifest, nil
+}
+
 // validateUntarredACI checks if manifest is a file and a proper ACI
 // manifest and tests if rootfs directory exists.
-func validateUntarredACI(target string) error {
-	manifestPath := path.Join(target, "manifest")
-	fi, err := os.Lstat(manifestPath)
+func validateUntarredACI(target string) (*schema.ImageManifest, error) {
+	manifest, err := getManifestFromDir(target)
 	if err != nil {
-		return err
-	}
-
-	if !fi.Mode().IsRegular() {
-		return errors.New("invalid ACI - manifest should be a file")
-	}
-	imageManifest := &schema.ImageManifest{}
-	jsonBytes, err := ioutil.ReadFile(manifestPath)
-	if err != nil {
-		return err
-	}
-	if err := imageManifest.UnmarshalJSON(jsonBytes); err != nil {
-		return err
+		return nil, err
 	}
 
 	rootfsPath := path.Join(target, "rootfs")
 	fi, err = os.Lstat(rootfsPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !fi.Mode().IsDir() {
 		return errors.New("invalid ACI - rootfs should be a directory")
 	}
 
-	return nil
+	return manifest, nil
 }
 
-func untarACI(target string, aci io.Reader) (string, error) {
+func untarACI(target string, aci io.Reader) (*schema.ImageManifest, string, error) {
 	tarFile, hash, err := storeDecompressed(target, aci)
 	if err != nil {
 		return "", nil
@@ -283,14 +294,16 @@ func untarACI(target string, aci io.Reader) (string, error) {
 			if err := writeAFile(target, header, tarReader); err != nil {
 				return "", err
 			}
+		default:
+			//TODO: Handle symlinks. Maybe all types?
 		}
 	}
 
-	if err := validateUntarredACI(target); err != nil {
-		return "", err
+	if manifest, err := validateUntarredACI(target); err != nil {
+		return nil, "", err
+	} else {
+		return manifest, hash, nil
 	}
-
-	return hash, nil
 }
 
 func writeADir(target string, header *tar.Header) error {

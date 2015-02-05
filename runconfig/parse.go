@@ -170,6 +170,7 @@ func Parse(cmd *flag.FlagSet, args []string) (*Config, *HostConfig, *flag.FlagSe
 		entrypoint []string
 		image      = cmd.Arg(0)
 	)
+	fmt.Fprintf(cmd.Out(), "image: %s", image)
 	if len(parsedArgs) > 1 {
 		runCmd = parsedArgs[1:]
 	}
