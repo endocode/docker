@@ -1263,15 +1263,8 @@ func (cli *DockerCli) CmdPush(args ...string) error {
 	return nil
 }
 
-func (cli *DockerCli) CmdPull(args ...string) error {
-	cmd := cli.Subcmd("pull", "NAME[:TAG]", "Pull an image or a repository from the registry", true)
-	allTags := cmd.Bool([]string{"a", "-all-tags"}, false, "Download all tagged images in the repository")
-	cmd.Require(flag.Exact, 1)
-
-	utils.ParseFlags(cmd, args, true)
-
+func (cli *DockerCli) pullDocker(cmd *flag.FlagSet, v url.Values, allTags *bool) error {
 	var (
-		v         = url.Values{}
 		remote    = cmd.Arg(0)
 		newRemote = remote
 	)
@@ -1323,6 +1316,32 @@ func (cli *DockerCli) CmdPull(args ...string) error {
 	}
 
 	return nil
+}
+
+func (cli *DockerCli) pullACI(cmd *flag.FlagSet, v url.Values) error {
+	v.Set("url", cmd.Arg(0))
+
+	return cli.stream("POST", "/images/create?"+v.Encode(), nil, cli.out, map[string][]string{})
+}
+
+func (cli *DockerCli) CmdPull(args ...string) error {
+	cmd := cli.Subcmd("pull", "NAME[:TAG]", "Pull an image or a repository from the registry", true)
+	allTags := cmd.Bool([]string{"a", "-all-tags"}, false, "Download all tagged images in the repository")
+	format := cmd.String([]string{"f", "-format"}, "docker", "Image format to pull")
+	cmd.Require(flag.Exact, 1)
+
+	utils.ParseFlags(cmd, args, true)
+
+	v := url.Values{}
+	v.Set("format", *format)
+	switch *format {
+	case "docker":
+		return cli.pullDocker(cmd, v, allTags)
+	case "aci":
+		return cli.pullACI(cmd, v)
+	default:
+		return fmt.Errorf("Invalid image format: %s", *format)
+	}
 }
 
 func (cli *DockerCli) CmdImages(args ...string) error {
