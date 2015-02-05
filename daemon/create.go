@@ -79,11 +79,11 @@ func (daemon *Daemon) Create(config *runconfig.Config, hostConfig *runconfig.Hos
 	}
 }
 
-func (daemon *Daemon) CreateDockerContainer(config *runconfig.Config, hostConfig *runConfig.HostConfig, name string) (*Container, []string, error) {
+func (daemon *Daemon) CreateACIContainer(config *runconfig.Config, hostConfig *runconfig.HostConfig, name string) (*Container, []string, error) {
 	return nil, nil, fmt.Errorf("Not implemented")
 }
 
-func (daemon *Daemon) CreateDockerContainer(config *runconfig.Config, hostConfig *runConfig.HostConfig, name string) (*Container, []string, error) {
+func (daemon *Daemon) CreateDockerContainer(config *runconfig.Config, hostConfig *runconfig.HostConfig, name string) (*Container, []string, error) {
 	var (
 		container *Container
 		warnings  []string
