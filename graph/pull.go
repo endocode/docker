@@ -70,8 +70,14 @@ func (s *TagStore) pullACIImage(job *engine.Job) engine.Status {
 			return job.Error(err)
 		}
 		aci = image
-	case "http", "https", "file":
+	case "http", "https":
 		image, err := downloadImage(img)
+		if err != nil {
+			return job.Error(err)
+		}
+		aci = image
+	case "file":
+		image, err := os.Open(u.Path)
 		if err != nil {
 			return job.Error(err)
 		}
