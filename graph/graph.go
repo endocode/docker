@@ -372,6 +372,7 @@ func createLayerTar(target string) (archive.Archive, error) {
 	if err := packer.Pack(); err != nil {
 		return nil, err
 	}
+	layerFile.Seek(0, 0)
 	return archive.Archive(layerFile), nil
 }
 
