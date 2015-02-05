@@ -11,12 +11,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/appc/spec/schema"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/pkg/parsers"
 	"github.com/docker/docker/registry"
 	"github.com/docker/docker/utils"
 	"github.com/docker/libtrust"
-	"github.com/appc/spec/schema"
 )
 
 const DEFAULTTAG = "latest"
