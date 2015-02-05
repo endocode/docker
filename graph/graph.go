@@ -366,7 +366,6 @@ func createLayerTar(target string) (archive.Archive, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer layerFile.Close()
 	tarWriter := tar.NewWriter(layerFile)
 	rootfsPath := path.Join(target, "rootfs")
 	packer := &tarPacker{tarWriter, rootfsPath}
