@@ -59,7 +59,7 @@ type Container struct {
 
 	ID string
 
-	aci         bool
+	ImgType     string
 	aciManifest schema.ImageManifest
 
 	Created time.Time
@@ -108,11 +108,11 @@ func (container *Container) FromDisk() error {
 	// then it is an ACI image. Just load the manifest.
 	manifestPath, err := container.manifestPath()
 	if err != nil {
-		container.aci = false
+		container.ImgType = "docker"
 	} else {
 		manifestSource, err := ioutil.ReadFile(manifestPath)
 		if err == nil {
-			container.aci = true
+			container.ImgType = "aci"
 
 			container.aciManifest = schema.ImageManifest{}
 			err = container.aciManifest.UnmarshalJSON(manifestSource)
@@ -120,7 +120,7 @@ func (container *Container) FromDisk() error {
 				return err
 			}
 		} else {
-			container.aci = false
+			container.ImgType = "docker"
 		}
 	}
 
@@ -335,7 +335,8 @@ func populateCommand(c *Container, env []string) error {
 	processConfig.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 
 	processConfig.Env = append(env, "DEBUGS="+c.root+" ## "+c.basefs)
-	if c.aci {
+	switch c.ImgType {
+	case "aci":
 		processConfig.Entrypoint = c.aciManifest.App.Exec[0]
 		processConfig.Arguments = c.aciManifest.App.Exec[1:]
 		//processConfig.Cmd = strings.Join(c.aciManifest.App.Exec, " ")
@@ -360,7 +361,7 @@ func populateCommand(c *Container, env []string) error {
 			LxcConfig:          lxcConfig,
 			AppArmorProfile:    c.AppArmorProfile,
 		}
-	} else {
+	case "docker":
 		c.command = &execdriver.Command{
 			ID:                 c.ID,
 			Rootfs:             c.RootfsPath(),
@@ -381,6 +382,8 @@ func populateCommand(c *Container, env []string) error {
 			LxcConfig:          lxcConfig,
 			AppArmorProfile:    c.AppArmorProfile,
 		}
+	default:
+		return fmt.Errorf("unknown image type: %s", c.ImgType)
 	}
 
 	return nil
