@@ -258,12 +258,12 @@ func validateUntarredACI(target string) (*schema.ImageManifest, error) {
 	}
 
 	rootfsPath := path.Join(target, "rootfs")
-	fi, err = os.Lstat(rootfsPath)
+	fi, err := os.Lstat(rootfsPath)
 	if err != nil {
 		return nil, err
 	}
 	if !fi.Mode().IsDir() {
-		return errors.New("invalid ACI - rootfs should be a directory")
+		return nil, errors.New("invalid ACI - rootfs should be a directory")
 	}
 
 	return manifest, nil
@@ -272,7 +272,7 @@ func validateUntarredACI(target string) (*schema.ImageManifest, error) {
 func untarACI(target string, aci io.Reader) (*schema.ImageManifest, string, error) {
 	tarFile, hash, err := storeDecompressed(target, aci)
 	if err != nil {
-		return "", nil
+		return nil, "", err
 	}
 	defer tarFile.Close()
 
@@ -283,16 +283,16 @@ func untarACI(target string, aci io.Reader) (*schema.ImageManifest, string, erro
 			if err == io.EOF {
 				break
 			}
-			return "", err
+			return nil, "", err
 		}
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if err := writeADir(target, header); err != nil {
-				return "", err
+				return nil, "", err
 			}
 		case tar.TypeReg:
 			if err := writeAFile(target, header, tarReader); err != nil {
-				return "", err
+				return nil, "", err
 			}
 		default:
 			//TODO: Handle symlinks. Maybe all types?

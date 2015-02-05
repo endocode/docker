@@ -50,6 +50,7 @@ func (s *TagStore) pullACIImage(job *engine.Job) engine.Status {
 		aci io.ReadCloser
 	)
 
+	img := job.Args[0]
 	u, err := url.Parse(img)
 	if err != nil {
 		return job.Error(err)
@@ -83,7 +84,7 @@ func (s *TagStore) pullACIImage(job *engine.Job) engine.Status {
 func (s *TagStore) doStuffWithACI(job *engine.Job, aci io.ReadCloser) engine.Status {
 	if manifest, id, err := s.graph.RegisterACI(aci); err != nil {
 		return job.Error(err)
-	} else if err := s.SetACI(manifest, id); err != nil {
+	} else if err := s.SetACI(manifest, id, false); err != nil {
 		return job.Error(err)
 	}
 	return engine.StatusOK

@@ -16,6 +16,7 @@ import (
 	"github.com/docker/docker/registry"
 	"github.com/docker/docker/utils"
 	"github.com/docker/libtrust"
+	"github.com/appc/spec/schema"
 )
 
 const DEFAULTTAG = "latest"
@@ -68,7 +69,7 @@ func NewTagStore(path string, graph *Graph, key libtrust.PrivateKey) (*TagStore,
 		graph:        graph,
 		trustKey:     key,
 		Repositories: make(map[string]Repository),
-		ACIRepo:      make(Repository)
+		ACIRepo:      make(Repository),
 		pullingPool:  make(map[string]chan struct{}),
 		pushingPool:  make(map[string]chan struct{}),
 	}
@@ -223,12 +224,12 @@ func (store *TagStore) SetACI(image *schema.ImageManifest, id string, force bool
 	store.Lock()
 	defer store.Unlock()
 	if !force {
-		storedId, exists := store.ACIRepo[image.Name]
+		storedId, exists := store.ACIRepo[string(image.Name)]
 		if exists && storedId != id {
-			return fmt.Error("Image with name %s is already stored, but their ids differ: (stored)%s != (new)%s", image.Name, storedId, id)
+			return fmt.Errorf("Image with name %s is already stored, but their ids differ: (stored)%s != (new)%s", image.Name, storedId, id)
 		}
 	}
-	store.ACIRepo[image.Name] = id
+	store.ACIRepo[string(image.Name)] = id
 	return nil
 }
 
