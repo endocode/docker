@@ -93,7 +93,7 @@ func (daemon *Daemon) CreateACIContainer(config *runconfig.Config, hostConfig *r
 		aciImageManifest *schema.ImageManifest
 	)
 
-	aciImageManifest, err = daemon.repositories.LookupACIImage(container.Name)
+	aciImageManifest, err = daemon.repositories.LookupACIImage(name)
 	if err != nil {
 		return nil, nil, err
 	}
