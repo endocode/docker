@@ -29,7 +29,7 @@ type TagStore struct {
 	path         string
 	graph        *Graph
 	Repositories map[string]Repository
-	ACIRepo      Repository
+	ACIRepo      map[string]string
 	trustKey     libtrust.PrivateKey
 	sync.Mutex
 	// FIXME: move push/pull-related fields
@@ -69,7 +69,7 @@ func NewTagStore(path string, graph *Graph, key libtrust.PrivateKey) (*TagStore,
 		graph:        graph,
 		trustKey:     key,
 		Repositories: make(map[string]Repository),
-		ACIRepo:      make(Repository),
+		ACIRepo:      make(map[string]string),
 		pullingPool:  make(map[string]chan struct{}),
 		pushingPool:  make(map[string]chan struct{}),
 	}
@@ -230,8 +230,7 @@ func (store *TagStore) SetACI(image *schema.ImageManifest, id string, force bool
 		}
 	}
 	store.ACIRepo[string(image.Name)] = id
-	store.save()
-	return nil
+	return store.save()
 }
 
 func (store *TagStore) Set(repoName, tag, imageName string, force bool) error {
