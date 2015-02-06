@@ -230,6 +230,7 @@ func (store *TagStore) SetACI(image *schema.ImageManifest, id string, force bool
 		}
 	}
 	store.ACIRepo[string(image.Name)] = id
+	store.save()
 	return nil
 }
 
