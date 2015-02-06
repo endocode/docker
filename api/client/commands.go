@@ -2181,12 +2181,16 @@ func (cli *DockerCli) createContainer(config *runconfig.Config, hostConfig *runc
 	stream, statusCode, err := cli.call("POST", "/containers/create?"+containerValues.Encode(), mergedConfig, false)
 	//if image not found try to pull it
 	if statusCode == 404 {
-		repo, tag := parsers.ParseRepositoryTag(config.Image)
-		if tag == "" {
-			tag = graph.DEFAULTTAG
+		switch config.Format {
+		case "docker":
+			repo, tag := parsers.ParseRepositoryTag(config.Image)
+			if tag == "" {
+				tag = graph.DEFAULTTAG
+			}
+			fmt.Fprintf(cli.err, "Unable to find image '%s:%s' locally\n", repo, tag)
+		case "aci":
+			fmt.Fprintf(cli.err, "Unable to find ACI image '%s' locally\n", config.Image)
 		}
-		fmt.Fprintf(cli.err, "Unable to find image '%s:%s' locally\n", repo, tag)
-
 		// we don't want to write to stdout anything apart from container.ID
 		if err = cli.pullImageCustomOut(config, cli.err); err != nil {
 			return nil, err
