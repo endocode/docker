@@ -3,6 +3,8 @@ package daemon
 import (
 	"fmt"
 
+	"github.com/appc/spec/schema"
+
 	"github.com/docker/docker/engine"
 	"github.com/docker/docker/graph"
 	"github.com/docker/docker/image"
@@ -81,28 +83,29 @@ func (daemon *Daemon) Create(config *runconfig.Config, hostConfig *runconfig.Hos
 
 func (daemon *Daemon) CreateACIContainer(config *runconfig.Config, hostConfig *runconfig.HostConfig, name string) (*Container, []string, error) {
 	var (
-		container *Container
-		warnings  []string
-		imgID     string
-		err       error
+		container        *Container
+		warnings         []string
+		imgID            string
+		err              error
+		aciImageManifest *schema.ImageManifest
 	)
 
 	if warnings, err = daemon.mergeAndVerifyConfig(config, nil); err != nil {
 		return nil, nil, err
 	}
 
+	imgID = daemon.repositories.ACIRepo[name]
+
 	if container, err = daemon.newContainer(name, config, config.Format, imgID); err != nil {
 		return nil, nil, err
 	}
 
-	//debug
-	aciManifest, err := daemon.repositories.LookupACIImage(container.Name)
+	aciImageManifest, err = daemon.repositories.LookupACIImage(container.Name)
 	if err != nil {
 		return nil, nil, err
 	}
-	return nil, nil, fmt.Errorf("Name from the aci: %s", aciManifest.Name)
+	container.AciImageManifest = *aciImageManifest
 
-	//
 	if err := daemon.Register(container); err != nil {
 		return nil, nil, err
 	}

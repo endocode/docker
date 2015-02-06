@@ -59,8 +59,8 @@ type Container struct {
 
 	ID string
 
-	ImgType     string
-	aciManifest schema.ImageManifest
+	ImgType          string
+	AciImageManifest schema.ImageManifest
 
 	Created time.Time
 
@@ -114,8 +114,8 @@ func (container *Container) FromDisk() error {
 		if err == nil {
 			container.ImgType = "aci"
 
-			container.aciManifest = schema.ImageManifest{}
-			err = container.aciManifest.UnmarshalJSON(manifestSource)
+			container.AciImageManifest = schema.ImageManifest{}
+			err = container.AciImageManifest.UnmarshalJSON(manifestSource)
 			if err != nil {
 				return err
 			}
@@ -337,9 +337,9 @@ func populateCommand(c *Container, env []string) error {
 	processConfig.Env = append(env, "DEBUGS="+c.root+" ## "+c.basefs)
 	switch c.ImgType {
 	case "aci":
-		processConfig.Entrypoint = c.aciManifest.App.Exec[0]
-		processConfig.Arguments = c.aciManifest.App.Exec[1:]
-		//processConfig.Cmd = strings.Join(c.aciManifest.App.Exec, " ")
+		processConfig.Entrypoint = c.AciImageManifest.App.Exec[0]
+		processConfig.Arguments = c.AciImageManifest.App.Exec[1:]
+		//processConfig.Cmd = strings.Join(c.AciImageManifest.App.Exec, " ")
 
 		c.command = &execdriver.Command{
 			ID:                 c.ID,
@@ -916,6 +916,8 @@ func (container *Container) jsonPath() (string, error) {
 // ACI images have an Image Manifest defined by the App Container Specification
 // https://github.com/appc/spec/blob/master/SPEC.md
 func (container *Container) manifestPath() (string, error) {
+	// FIXME
+	//return daemon.repositories.LookupACIImage()
 	return container.getRootResourcePath("manifest")
 }
 
