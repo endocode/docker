@@ -51,6 +51,13 @@ func (s *TagStore) pullACIImage(job *engine.Job) engine.Status {
 	)
 
 	img := job.Args[0]
+
+	// Maybe we already have the image
+	_, err := s.GetACIImage(img)
+	if err == nil {
+		return engine.StatusOK
+	}
+
 	u, err := url.Parse(img)
 	if err != nil {
 		return job.Error(err)
