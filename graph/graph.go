@@ -1,7 +1,7 @@
 package graph
 
 import (
-	"crypto/sha512"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -209,7 +209,7 @@ func (doc *DeleteOnClose) Close() error {
 }
 
 // storeDecompressed stores the aci on disk as uncompressed tar,
-// returns a reader to it and its sha512sum.
+// returns a reader to it and its sha256sum.
 func storeDecompressed(target string, aci io.Reader) (io.ReadCloser, string, error) {
 	decompressed, err := archive.DecompressStream(aci)
 	if err != nil {
@@ -217,7 +217,7 @@ func storeDecompressed(target string, aci io.Reader) (io.ReadCloser, string, err
 	}
 	defer decompressed.Close()
 
-	hasher := sha512.New()
+	hasher := sha256.New()
 	teeReader := io.TeeReader(decompressed, hasher)
 	aciFilename := path.Join(target, "aci.tar")
 	tarFile, err := os.Create(aciFilename)
