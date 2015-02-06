@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/appc/spec/schema"
+
 	"github.com/docker/libcontainer/label"
 
 	log "github.com/Sirupsen/logrus"
@@ -478,6 +480,15 @@ func (daemon *Daemon) checkDeprecatedExpose(config *runconfig.Config) bool {
 		}
 	}
 	return false
+}
+
+// TODO: Probably more needs to be done here
+func (daemon *Daemon) mergeAndVerifyConfigACI(config *runconfig.Config, manifest *schema.ImageManifest) ([]string, error) {
+	if manifest.App == nil {
+		return nil, fmt.Errorf("No app in ACI manifest")
+	}
+	config.Entrypoint = []string(manifest.App.Exec)
+	return nil, nil
 }
 
 func (daemon *Daemon) mergeAndVerifyConfig(config *runconfig.Config, img *image.Image) ([]string, error) {
