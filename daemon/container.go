@@ -60,7 +60,7 @@ type Container struct {
 	ID string
 
 	ImgType          string
-	AciImageManifest schema.ImageManifest
+	AciImageManifest schema.ImageManifest `json:"-"`
 
 	Created time.Time
 
