@@ -14,8 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/appc/spec/schema"
-
 	"github.com/docker/libcontainer/devices"
 	"github.com/docker/libcontainer/label"
 
@@ -60,7 +58,6 @@ type Container struct {
 	ID string
 
 	ImgType          string
-	AciImageManifest schema.ImageManifest `json:"-"`
 
 	Created time.Time
 
@@ -107,21 +104,14 @@ func (container *Container) FromDisk() error {
 	// It might be an ACI image or a Docker image. If the manifest file exists,
 	// then it is an ACI image. Just load the manifest.
 	manifestPath, err := container.manifestPath()
-	if err != nil {
-		container.ImgType = "docker"
-	} else {
-		manifestSource, err := ioutil.ReadFile(manifestPath)
+	if err == nil {
+		_, err := os.Lstat(manifestPath)
 		if err == nil {
 			container.ImgType = "aci"
-
-			container.AciImageManifest = schema.ImageManifest{}
-			err = container.AciImageManifest.UnmarshalJSON(manifestSource)
-			if err != nil {
-				return err
-			}
-		} else {
-			container.ImgType = "docker"
 		}
+	}
+	if container.ImgType == "" {
+		container.ImgType = "docker"
 	}
 
 	pth, err := container.jsonPath()
