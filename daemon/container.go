@@ -60,7 +60,7 @@ type Container struct {
 	ID string
 
 	ImgType          string
-	AciImageManifest schema.ImageManifest
+	AciImageManifest schema.ImageManifest `json:"-"`
 
 	Created time.Time
 
@@ -335,55 +335,25 @@ func populateCommand(c *Container, env []string) error {
 	processConfig.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 
 	processConfig.Env = append(env, "DEBUGS="+c.root+" ## "+c.basefs)
-	switch c.ImgType {
-	case "aci":
-		processConfig.Entrypoint = c.AciImageManifest.App.Exec[0]
-		processConfig.Arguments = c.AciImageManifest.App.Exec[1:]
-		//processConfig.Cmd = strings.Join(c.AciImageManifest.App.Exec, " ")
-
-		c.command = &execdriver.Command{
-			ID:                 c.ID,
-			Rootfs:             c.RootfsPath(), //env2.Get("ACI_ROOTFS"),
-			ReadonlyRootfs:     false,
-			InitPath:           "/.dockerinit",
-			WorkingDir:         c.Config.WorkingDir,
-			Network:            en,
-			Ipc:                ipc,
-			Pid:                pid,
-			Resources:          resources,
-			AllowedDevices:     allowedDevices,
-			AutoCreatedDevices: autoCreatedDevices,
-			CapAdd:             c.hostConfig.CapAdd,
-			CapDrop:            c.hostConfig.CapDrop,
-			ProcessConfig:      processConfig,
-			ProcessLabel:       c.GetProcessLabel(),
-			MountLabel:         c.GetMountLabel(),
-			LxcConfig:          lxcConfig,
-			AppArmorProfile:    c.AppArmorProfile,
-		}
-	case "docker":
-		c.command = &execdriver.Command{
-			ID:                 c.ID,
-			Rootfs:             c.RootfsPath(),
-			ReadonlyRootfs:     c.hostConfig.ReadonlyRootfs,
-			InitPath:           "/.dockerinit",
-			WorkingDir:         c.Config.WorkingDir,
-			Network:            en,
-			Ipc:                ipc,
-			Pid:                pid,
-			Resources:          resources,
-			AllowedDevices:     allowedDevices,
-			AutoCreatedDevices: autoCreatedDevices,
-			CapAdd:             c.hostConfig.CapAdd,
-			CapDrop:            c.hostConfig.CapDrop,
-			ProcessConfig:      processConfig,
-			ProcessLabel:       c.GetProcessLabel(),
-			MountLabel:         c.GetMountLabel(),
-			LxcConfig:          lxcConfig,
-			AppArmorProfile:    c.AppArmorProfile,
-		}
-	default:
-		return fmt.Errorf("unknown image type: %s", c.ImgType)
+	c.command = &execdriver.Command{
+		ID:                 c.ID,
+		Rootfs:             c.RootfsPath(),
+		ReadonlyRootfs:     c.hostConfig.ReadonlyRootfs,
+		InitPath:           "/.dockerinit",
+		WorkingDir:         c.Config.WorkingDir,
+		Network:            en,
+		Ipc:                ipc,
+		Pid:                pid,
+		Resources:          resources,
+		AllowedDevices:     allowedDevices,
+		AutoCreatedDevices: autoCreatedDevices,
+		CapAdd:             c.hostConfig.CapAdd,
+		CapDrop:            c.hostConfig.CapDrop,
+		ProcessConfig:      processConfig,
+		ProcessLabel:       c.GetProcessLabel(),
+		MountLabel:         c.GetMountLabel(),
+		LxcConfig:          lxcConfig,
+		AppArmorProfile:    c.AppArmorProfile,
 	}
 
 	return nil
