@@ -587,6 +587,20 @@ func (graph *Graph) Delete(name string) error {
 	return os.RemoveAll(tmp)
 }
 
+func (graph *Graph) MapACI(repo map[string]string) (map[string]*schema.ImageManifest, error) {
+	images := make(map[string]*schema.ImageManifest)
+	err := graph.walkAllACI(func(image *schema.ImageManifest) {
+		id, ok := repo[string(image.Name)]
+		if ok {
+			images[id] = image
+		}
+	})
+	if err != nil {
+		return nil, err
+	}
+	return images, nil
+}
+
 // Map returns a list of all images in the graph, addressable by ID.
 func (graph *Graph) Map() (map[string]*image.Image, error) {
 	images := make(map[string]*image.Image)
@@ -597,6 +611,24 @@ func (graph *Graph) Map() (map[string]*image.Image, error) {
 		return nil, err
 	}
 	return images, nil
+}
+
+// walkAllACI iterates over each ACI image in the graph, and passes it to a handler.
+// The walking order is undetermined.
+func (graph *Graph) walkAllACI(handler func(*schema.ImageManifest)) error {
+	files, err := ioutil.ReadDir(graph.Root)
+	if err != nil {
+		return err
+	}
+	for _, st := range files {
+		if img, err := graph.GetACI(st.Name()); err != nil {
+			// Skip image
+			continue
+		} else if handler != nil {
+			handler(img)
+		}
+	}
+	return nil
 }
 
 // walkAll iterates over each image in the graph, and passes it to a handler.
@@ -617,6 +649,30 @@ func (graph *Graph) walkAll(handler func(*image.Image)) error {
 	return nil
 }
 
+// ByParentACI returns a lookup table of images by their parent.
+// If an image of id ID has 3 children images, then the value for key ID
+// will be a list of 3 images.
+// If an image has no children, it will not have an entry in the table.
+func (graph *Graph) ByParentACI(repo map[string]string) (map[string][]*schema.ImageManifest, error) {
+	byParent := make(map[string][]*schema.ImageManifest)
+	err := graph.walkAllACI(func(img *schema.ImageManifest) {
+		for _, dep := range img.Dependencies {
+			parent, err := graph.GetACI(string(dep.App))
+			if err != nil {
+				continue
+			}
+			if id, ok := repo[string(parent.Name)]; ok {
+				if children, exists := byParent[id]; exists {
+					byParent[id] = append(children, img)
+				} else {
+					byParent[id] = []*schema.ImageManifest{img}
+				}
+			}
+		}
+	})
+	return byParent, err
+}
+
 // ByParent returns a lookup table of images by their parent.
 // If an image of id ID has 3 children images, then the value for key ID
 // will be a list of 3 images.
@@ -635,6 +691,26 @@ func (graph *Graph) ByParent() (map[string][]*image.Image, error) {
 		}
 	})
 	return byParent, err
+}
+
+// Heads returns all ACI heads in the graph, keyed by id.
+// A head is an image which is not the parent of another image in the graph.
+func (graph *Graph) HeadsACI(repo map[string]string) (map[string]*schema.ImageManifest, error) {
+	heads := make(map[string]*schema.ImageManifest)
+	byParent, err := graph.ByParentACI(repo)
+	if err != nil {
+		return nil, err
+	}
+	err = graph.walkAllACI(func(image *schema.ImageManifest) {
+		// If it's not in the byParent lookup table, then
+		// it's not a parent -> so it's a head!
+		if id, ok := repo[string(image.Name)]; ok {
+			if _, exists := byParent[id]; !exists {
+				heads[id] = image
+			}
+		}
+	})
+	return heads, err
 }
 
 // Heads returns all heads in the graph, keyed by id.
