@@ -165,6 +165,13 @@ func (graph *Graph) RegisterACI(aci io.Reader) (*schema.ImageManifest, string, e
 	if err != nil {
 		return nil, "", err
 	}
+
+	// check if the layer already exists
+	_, err = os.Stat(graph.ImageRoot(id))
+	if !os.IsNotExist(err) {
+		return manifest, id, nil
+	}
+
 	layerFile, err := createLayerTar(tmp)
 	if err != nil {
 		return nil, "", err
