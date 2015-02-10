@@ -100,7 +100,7 @@ func (s *TagStore) pullACIImage(job *engine.Job) engine.Status {
 func (s *TagStore) doStuffWithACI(job *engine.Job, aci io.ReadCloser) engine.Status {
 	if manifest, id, err := s.graph.RegisterACI(aci); err != nil {
 		return job.Error(err)
-	} else if err := s.SetACI(manifest, id, false); err != nil {
+	} else if err := s.SetACI(manifest, id, true); err != nil {
 		return job.Error(err)
 	}
 	return engine.StatusOK
