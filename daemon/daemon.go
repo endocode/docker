@@ -487,7 +487,14 @@ func (daemon *Daemon) mergeAndVerifyConfigACI(config *runconfig.Config, manifest
 	if manifest.App == nil {
 		return nil, fmt.Errorf("No app in ACI manifest")
 	}
-	config.Entrypoint = []string(manifest.App.Exec)
+
+	if err := runconfig.MergeACI(config, manifest); err != nil {
+		return nil, err
+	}
+
+	if len(config.Entrypoint) == 0 && len(config.Cmd) == 0 {
+		return nil, fmt.Errorf("No command specified")
+	}
 	return nil, nil
 }
 
