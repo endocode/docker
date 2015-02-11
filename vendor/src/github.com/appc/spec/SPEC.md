@@ -48,7 +48,7 @@ Now, let's dive into the pieces that took us from three URLs to a running contai
 ## App Container Image
 
 An *App Container Image* (ACI) contains all files and metadata needed to execute a given app.
-In some ways you can think of an ACI as equivalent to a static binary.
+In some ways an ACI can be thought of as equivalent to a static binary.
 
 ### Image Layout
 
@@ -64,50 +64,56 @@ It includes a *rootfs* with all of the files that will exist in the root of the 
 
 ### Image Archives
 
-The ACI archive format aims for flexibility and relies on very boring technologies: HTTP, gpg, tar and gzip.
-This set of formats makes it easy to build, host and secure a container using technologies that are battle-tested.
+The ACI file format ("image archive") aims for flexibility and relies on standard and common technologies: HTTP, gpg, tar and gzip.
+This set of formats makes it easy to build, host and secure a container using technologies that are widely available and battle-tested.
 
-Image archives MUST be a tar formatted file.
-The image may be optionally compressed with gzip, bzip2, or xz.
-After compression, images may also be encrypted with AES symmetric encryption.
+- Image archives MUST be a tar formatted file.
+- All files in the image MUST maintain all of their original properties, including timestamps, Unix modes, and extended attributes (xattrs).
+- Image archives MUST be named with the suffix `.aci`, irrespective of compression/encryption (see below).
+- Image archives SHOULD be signed using PGP, the format MUST be ascii-armored detached signature mode.
+- Image signatures MUST be named with the suffix `.aci.asc`.
+
+There are two further transformations that may be applied to image archives for transport:
+- Image archives MAY be compressed with `gzip`, `bzip2`, or `xz`.
+- Image archives MAY be encrypted with AES symmetric encryption, after (optional) compression.
+
+The following example demonstrates the creation of a simple ACI using common command-line tools.
+In this case, the ACI is both compressed and encrypted.
 
 ```
 tar cvf reduce-worker.tar manifest rootfs
-gpg --output reduce-worker.sig --detach-sig reduce-worker.tar
+gpg --armor --output reduce-worker.aci.asc --detach-sig reduce-worker.tar
 gzip reduce-worker.tar -c > reduce-worker.aci
-```
-
-Optional encryption:
-
-```
 gpg --output reduce-worker.aci --digest-algo sha256 --cipher-algo AES256 --symmetric reduce-worker.aci
 ```
 
-All files in the image must maintain all of their original properties, including timestamps, Unix modes, and extended attributes (xattrs).
+**Note**: the key distribution mechanism to facilitate image signature validation is not defined here.
+Implementations of the app container spec will need to provide a mechanism for users to configure the list of signing keys to trust, or use the key discovery described in [App Container Image Discovery](#app-container-image-discovery).
+
+An example application container image builder is [actool](https://github.com/appc/spec/tree/master/actool).
+
+### Image ID
 
 An image is addressed and verified against the hash of its uncompressed tar file, the _image ID_.
+The image ID provides a way to uniquely and globally reference an image, and verify its integrity at any point.
 The default digest format is sha512, but all hash IDs in this format are prefixed by the algorithm used (e.g. sha512-a83...).
 
 ```
 echo sha512-$(sha512sum reduce-worker.tar | awk '{print $1}')
 ```
 
-**Note**: the key distribution mechanism is not defined here.
-Implementations of the app container spec will need to provide a mechanism for users to configure the list of signing keys to trust or use the key discovery described in "App Container Image Discovery".
-
-An example application container image builder is [actool](https://github.com/appc/spec/tree/master/actool).
-
 ### Image Manifest
 
-The [image manifest](#image-manifest-schema) is a JSON file that includes details about the contents of the ACI, and optionally information about how to execute a process inside the ACI's rootfs.
+The [image manifest](#image-manifest-schema) is a [JSON](https://tools.ietf.org/html/rfc4627) file that includes details about the contents of the ACI, and optionally information about how to execute a process inside the ACI's rootfs.
 If included, execution details include mount points that should exist, the user, the command args, default cgroup settings and more.
-The manifest may also define binaries to execute in response to lifecycle events of the main process such as *pre-start* and *post-stop*.
+The manifest MAY also define binaries to execute in response to lifecycle events of the main process such as *pre-start* and *post-stop*.
 
+Image manifests MUST be valid JSON located in the file `manifest` in the root of the image archive.
 Image manifests MAY specify dependencies, which describe how to assemble the final rootfs from a collection of other images.
-As an example, you might have an app that needs special certificates layered into its filesystem.
-In this case, you can reference the name "example.com/trusted-certificate-authority" as a dependency in the image manifest.
+As an example, an app might require special certificates to be layered into its filesystem.
+In this case, the app can reference the name "example.com/trusted-certificate-authority" as a dependency in the image manifest.
 The dependencies are applied in order and each image dependency can overwrite files from the previous dependency.
-An optional path whitelist can be provided, in which case all non-specified files from all dependencies will be omitted in the final, assembled rootfs.
+An optional *path whitelist* can be provided, in which case all non-specified files from all dependencies will be omitted in the final, assembled rootfs.
 
 Image Format TODO
 
@@ -234,9 +240,9 @@ For example, given the app name `example.com/reduce-worker`, with version `1.0.0
     https://example.com/reduce-worker-1.0.0-linux-amd64.aci
 
 If this fails, move on to meta discovery.
-If this succeeds, try fetching the signature using the same template but with a `.sig` extension:
+If this succeeds, try fetching the signature using the same template but with a `.aci.asc` extension:
 
-    https://example.com/reduce-worker-1.0.0-linux-amd64.sig
+    https://example.com/reduce-worker-1.0.0-linux-amd64.aci.asc
 
 ### Meta Discovery
 
@@ -269,12 +275,12 @@ The algorithm first ensures that the prefix of the AC Name matches the prefix-ma
 curl $(echo "$urltmpl" | sed -e "s/{name}/$appname/" -e "s/{version}/$version/" -e "s/{os}/$os/" -e "s/{arch}/$arch/" -e "s/{ext}/$ext/")
 ```
 
-where _appname_, _version_, _os_, and _arch_ are set to their respective values for the application, and _ext_ is either `aci` or `sig` for retrieving an app container image or signature respectively.
+where _appname_, _version_, _os_, and _arch_ are set to their respective values for the application, and _ext_ is either `aci` or `aci.asc` for retrieving an app container image or signature respectively.
 
 In our example above this would be:
 
 ```
-sig: https://storage.example.com/linux/amd64/reduce-worker-1.0.0.sig
+sig: https://storage.example.com/linux/amd64/reduce-worker-1.0.0.aci.asc
 aci: https://storage.example.com/linux/amd64/reduce-worker-1.0.0.aci
 keys: https://example.com/pubkeys.gpg
 ```
@@ -314,7 +320,6 @@ The app container specification defines an HTTP-based metadata service for provi
 ### Metadata Server
 
 The ACE must provide a Metadata server on the address given to the container via the `AC_METADATA_URL` environment variable.
-By convention, the default address will be `http://169.254.169.255`.
 
 Clients querying any of these endpoints must specify the `Metadata-Flavor: AppContainer` header.
 
@@ -322,7 +327,7 @@ Clients querying any of these endpoints must specify the `Metadata-Flavor: AppCo
 
 Information about the container that this app is executing in.
 
-Retrievable at `http://$AC_METADATA_URL/acMetadata/v1/container`
+Retrievable at `$AC_METADATA_URL/acMetadata/v1/container`
 
 | Entry       | Description |
 |-------------|-------------|
@@ -335,7 +340,7 @@ Retrievable at `http://$AC_METADATA_URL/acMetadata/v1/container`
 Every running process will be able to introspect its App Name via the `AC_APP_NAME` environment variable.
 This is necessary to query for the correct endpoint metadata.
 
-Retrievable at `http://$AC_METADATA_URL/acMetadata/v1/apps/$AC_APP_NAME/`
+Retrievable at `$AC_METADATA_URL/acMetadata/v1/apps/$AC_APP_NAME/`
 
 | Entry         | Description |
 |---------------|-------------|
@@ -348,12 +353,12 @@ Retrievable at `http://$AC_METADATA_URL/acMetadata/v1/apps/$AC_APP_NAME/`
 As a basic building block for building a secure identity system, the metadata service must provide an HMAC (described in [RFC2104](https://www.ietf.org/rfc/rfc2104.txt)) endpoint for use by the apps in the container.
 This gives a cryptographically verifiable identity to the container based on its container unique ID and the container HMAC key, which is held securely by the ACE.
 
-Accessible at `http://169.254.169.255/acMetadata/v1/container/hmac`
+Accessible at `$AC_METADATA_URL/acMetadata/v1/container/hmac`
 
 | Entry | Description |
 |-------|-------------|
-|sign   | POST any object to this endpoint and retrieve a base64 hmac-sha256 signature as the response body. The metadata service holds onto the AES key as a sort of container TPM. |
-|verify | Verify a signature from another container. POST a form with signature=&lt;base64 encoded signature&gt; and uid=&lt;uid of the container that generated the signature&gt;. Returns 200 OK if the signature passes. |
+|sign   | POST a form with content=&lt;object to sign&gt; and retrieve a base64 hmac-sha512 signature as the response body. The metadata service holds onto the secret key as a sort of container TPM. |
+|verify | Verify a signature from another container. POST a form with content=&lt;object that was signed&gt;, uid=&lt;uid of the container that generated the signature&gt;, signature=&lt;base64 encoded signature&gt;. Returns 200 OK if the signature passes and 403 Forbidden if the signature check fails. |
 
 
 ## AC Name Type
@@ -376,12 +381,12 @@ The schema validator will ensure that the keys conform to these constraints.
 
 ### Image Manifest Schema
 
-JSON Schema for the Image Manifest (app image manifest, ACI manifest)
+JSON Schema for the Image Manifest (app image manifest, ACI manifest), conforming to [RFC4627](https://tools.ietf.org/html/rfc4627)
 
 ```
 {
     "acKind": "ImageManifest",
-    "acVersion": "0.2.0",
+    "acVersion": "0.3.0",
     "name": "example.com/reduce-worker",
     "labels": [
         {
@@ -399,7 +404,8 @@ JSON Schema for the Image Manifest (app image manifest, ACI manifest)
     ],
     "app": {
         "exec": [
-            "/usr/bin/reduce-worker"
+            "/usr/bin/reduce-worker",
+            "--quiet"
         ],
         "user": "100",
         "group": "300",
@@ -412,7 +418,8 @@ JSON Schema for the Image Manifest (app image manifest, ACI manifest)
             },
             {
                 "exec": [
-                    "/usr/bin/deregister-worker"
+                    "/usr/bin/deregister-worker",
+                    "--verbose"
                 ],
                 "name": "post-stop"
             }
@@ -444,8 +451,8 @@ JSON Schema for the Image Manifest (app image manifest, ACI manifest)
         ],
         "mountPoints": [
             {
-                "name": "database",
-                "path": "/var/lib/db",
+                "name": "work",
+                "path": "/var/lib/work",
                 "readOnly": false
             }
         ],
@@ -549,18 +556,21 @@ Alternatively, an AppImage might specify a dependency with no image ID and no "v
 
 ### Container Runtime Manifest Schema
 
-JSON Schema for the Container Runtime Manifest (container manifest)
+JSON Schema for the Container Runtime Manifest (container manifest), conforming to [RFC4627](https://tools.ietf.org/html/rfc4627)
 
 ```
 {
 
-    "acVersion": "0.2.0",
+    "acVersion": "0.3.0",
     "acKind": "ContainerRuntimeManifest",
     "uuid": "6733C088-A507-4694-AABF-EDBE4FC5266F",
     "apps": [
         {
             "app": "example.com/reduce-worker-1.0.0",
-            "imageID": "sha512-..."
+            "imageID": "sha512-...",
+            "mounts": [
+                 {"volume": "work", "mountPoint": "work"}
+            ]
         },
         {
             "app": "example.com/worker-backup-1.0.0",
@@ -572,8 +582,13 @@ JSON Schema for the Container Runtime Manifest (container manifest)
                 }
             ],
             "annotations": [
-                "name": "foo",
-                "value": "baz"
+                {
+                    "name": "foo",
+                    "value": "baz"
+                }
+            ],
+            "mounts": [
+                 {"volume": "work", "mountPoint": "backup"}
             ]
         },
         {
@@ -583,18 +598,10 @@ JSON Schema for the Container Runtime Manifest (container manifest)
     ],
     "volumes": [
         {
+            "name": "work",
             "kind": "host",
             "source": "/opt/tenant1/work",
-            "readOnly": true,
-            "fulfills": [
-                "work"
-            ]
-        },
-        {
-            "kind": "empty",
-            "fulfills": [
-                "buildOutput"
-            ]
+            "readOnly": true
         }
     ],
     "isolators": [
@@ -618,12 +625,15 @@ JSON Schema for the Container Runtime Manifest (container manifest)
 * **apps** (required) list of apps that will execute inside of this container
     * **app** (optional) name of the app (string, restricted to AC Name formatting)
     * **imageID** (required) content hash of the image that this app will execute inside of (string, must be of the format "type-value", where "type" is "sha512" and value is the hex encoded string of the hash)
+    * **mounts** (optional) list of mounts mapping an app mountPoint to a volume
+      * **volume** name of the volume that will fulfill this mount (string, restricted to the AC Name formatting)
+      * **mountPoint** name of the app mount point to place the volume on (string, restricted to the AC Name formatting)
     * **isolators** (optional) list of isolators that should be applied to this app (key is restricted to the AC Name formatting and the value can be a freeform string)
     * **annotations** (optional) arbitrary metadata appended to the app. Should be a list of annotation objects (where the *name* is restricted to the [AC Name](#ac-name-type) formatting and *value* is an arbitrary string). Annotation names must be unique within the list. These will be merged with annotations provided by the image manifest when queried via the metadata service; values in this list take precedence over those in the image manifest.
 * **volumes** (optional) list of volumes which should be mounted into each application's filesystem
+    * **name** (required) used to map the volume to an app's mountPoint at runtime. (string, restricted to the AC Name formatting)
     * **kind** (required) either "empty" or "host". "empty" fulfills a mount point by ensuring the path exists (writes go to container). "host" fulfills a mount point with a bind mount from a **source**.
     * **source** (required if **kind** is "host") absolute path on host to be bind mounted into the container under a mount point.
     * **readOnly** (optional if **kind** is "host") whether or not the volume should be mounted read only.
-    * **fulfills** (required) MountPoints of the containers that this volume can fulfill (string, restricted to AC Name formatting)
 * **isolators** (optional) list of isolators that will apply to all apps in this container (name is restricted to the AC Name formatting and the value can be a freeform string)
 * **annotations** (optional) arbitrary metadata the executor should make available to applications via the metadata service. Should be a list of annotation objects (where the *name* is restricted to the [AC Name](#ac-name-type) formatting and *value* is an arbitrary string). Annotation names must be unique within the list.
