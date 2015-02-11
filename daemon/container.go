@@ -57,7 +57,7 @@ type Container struct {
 
 	ID string
 
-	ImgType          string
+	ImgType string
 
 	Created time.Time
 
@@ -219,24 +219,6 @@ func (container *Container) getRootResourcePath(path string) (string, error) {
 }
 
 func populateCommand(c *Container, env []string) error {
-	//var env2 engine.Env
-	//var m schema.ImageManifest
-
-	//if c.aci {
-	//	env2 = env
-
-	//	b, err := ioutil.ReadFile(env2.Get("ACI_MANIFEST"))
-	//	if err != nil {
-	//		return err
-	//	}
-
-	//	m = schema.ImageManifest{}
-	//	err = m.UnmarshalJSON(b)
-	//	if err != nil {
-	//		return err
-	//	}
-	//}
-
 	en := &execdriver.Network{
 		Mtu:       c.daemon.config.Mtu,
 		Interface: nil,
@@ -323,8 +305,8 @@ func populateCommand(c *Container, env []string) error {
 	}
 
 	processConfig.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	processConfig.Env = env
 
-	processConfig.Env = append(env, "DEBUGS="+c.root+" ## "+c.basefs)
 	c.command = &execdriver.Command{
 		ID:                 c.ID,
 		Rootfs:             c.RootfsPath(),
