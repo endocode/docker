@@ -71,7 +71,7 @@ func (s *TagStore) pullACIImage(job *engine.Job) engine.Status {
 		if err != nil {
 			return job.Error(err)
 		}
-		ep, err := discovery.DiscoverEndpoints(*app, true)
+		ep, _, err := discovery.DiscoverEndpoints(*app, true)
 		if err != nil {
 			return job.Error(err)
 		}
