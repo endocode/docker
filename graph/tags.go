@@ -188,6 +188,19 @@ func (store *TagStore) DeleteAll(id string) error {
 	return nil
 }
 
+func (store *TagStore) DeleteACI(name string) (bool, error) {
+	store.Lock()
+	defer store.Unlock()
+	if err := store.reload(); err != nil {
+		return false, err
+	}
+	if _, exists := store.ACIRepo[name]; exists {
+		delete(store.ACIRepo, name)
+		return true, store.save()
+	}
+	return false, fmt.Errorf("ACI image not found: %s", name)
+}
+
 func (store *TagStore) Delete(repoName, tag string) (bool, error) {
 	store.Lock()
 	defer store.Unlock()

@@ -834,7 +834,7 @@ func deleteImages(eng *engine.Engine, version version.Version, w http.ResponseWr
 	if vars == nil {
 		return fmt.Errorf("Missing parameter")
 	}
-	var job = eng.Job("image_delete", vars["name"])
+	var job = eng.Job("image_delete", r.Form.Get("format"), vars["name"])
 	streamJSON(job, w, false)
 	job.Setenv("force", r.Form.Get("force"))
 	job.Setenv("noprune", r.Form.Get("noprune"))
