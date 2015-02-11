@@ -19,6 +19,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/docker/docker/builder"
 	"github.com/docker/docker/pkg/archive"
 )
 
@@ -49,14 +50,14 @@ func TestBuildEmptyWhitespace(t *testing.T) {
 		name,
 		`
     FROM busybox
-    RUN 
+    COPY
       quux \
       bar
     `,
 		true)
 
 	if err == nil {
-		t.Fatal("no error when dealing with a RUN statement with no content on the same line")
+		t.Fatal("no error when dealing with a COPY statement with no content on the same line")
 	}
 
 	logDone("build - statements with whitespace and no content should generate a parse error")
@@ -1721,10 +1722,10 @@ func TestBuildWithInaccessibleFilesInContext(t *testing.T) {
 			t.Fatalf("failed to chown directory to root: %s", err)
 		}
 		if err = os.Chmod(pathToDirectoryWithoutReadAccess, 0444); err != nil {
-			t.Fatalf("failed to chmod directory to 755: %s", err)
+			t.Fatalf("failed to chmod directory to 444: %s", err)
 		}
 		if err = os.Chmod(pathToFileInDirectoryWithoutReadAccess, 0700); err != nil {
-			t.Fatalf("failed to chmod file to 444: %s", err)
+			t.Fatalf("failed to chmod file to 700: %s", err)
 		}
 
 		buildCmd := exec.Command("su", "unprivilegeduser", "-c", fmt.Sprintf("%s build -t %s .", dockerBinary, name))
@@ -1796,7 +1797,7 @@ func TestBuildWithInaccessibleFilesInContext(t *testing.T) {
 		}
 
 	}
-	logDone("build - ADD from context with inaccessible files must fail")
+	logDone("build - ADD from context with inaccessible files must not pass")
 	logDone("build - ADD from context with accessible links must work")
 	logDone("build - ADD from context with ignored inaccessible files must work")
 }
@@ -2169,7 +2170,7 @@ func TestBuildContextCleanupFailedBuild(t *testing.T) {
 		t.Fatalf("context should have been deleted, but wasn't")
 	}
 
-	logDone("build - verify context cleanup works properly after a failed build")
+	logDone("build - verify context cleanup works properly after an unsuccessful build")
 }
 
 func TestBuildCmd(t *testing.T) {
@@ -2291,6 +2292,27 @@ func TestBuildExposeOrder(t *testing.T) {
 		t.Errorf("EXPOSE should invalidate the cache only when ports actually changed")
 	}
 	logDone("build - expose order")
+}
+
+func TestBuildExposeUpperCaseProto(t *testing.T) {
+	name := "testbuildexposeuppercaseproto"
+	expected := "map[5678/udp:map[]]"
+	defer deleteImages(name)
+	_, err := buildImage(name,
+		`FROM scratch
+        EXPOSE 5678/UDP`,
+		true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := inspectField(name, "Config.ExposedPorts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res != expected {
+		t.Fatalf("Exposed ports %s, expected %s", res, expected)
+	}
+	logDone("build - expose port with upper case proto")
 }
 
 func TestBuildEmptyEntrypointInheritance(t *testing.T) {
@@ -3185,7 +3207,7 @@ func TestBuildFails(t *testing.T) {
 	} else {
 		t.Fatal("Error must not be nil")
 	}
-	logDone("build - fails")
+	logDone("build - unsuccessful")
 }
 
 func TestBuildFailsDockerfileEmpty(t *testing.T) {
@@ -3199,7 +3221,7 @@ func TestBuildFailsDockerfileEmpty(t *testing.T) {
 	} else {
 		t.Fatal("Error must not be nil")
 	}
-	logDone("build - fails with empty dockerfile")
+	logDone("build - unsuccessful with empty dockerfile")
 }
 
 func TestBuildOnBuild(t *testing.T) {
@@ -4306,7 +4328,7 @@ func TestBuildVerifySingleQuoteFails(t *testing.T) {
 		t.Fatal("The image was not supposed to be able to run")
 	}
 
-	logDone("build - verify single quotes fail")
+	logDone("build - verify single quotes break the build")
 }
 
 func TestBuildVerboseOut(t *testing.T) {
@@ -4693,4 +4715,170 @@ func TestBuildDockerfileOutsideContext(t *testing.T) {
 	deleteImages(name)
 
 	logDone("build - Dockerfile outside context")
+}
+
+func TestBuildSpaces(t *testing.T) {
+	// Test to make sure that leading/trailing spaces on a command
+	// doesn't change the error msg we get
+	var (
+		err1 error
+		err2 error
+	)
+
+	name := "testspaces"
+	defer deleteImages(name)
+	ctx, err := fakeContext("FROM busybox\nCOPY\n",
+		map[string]string{
+			"Dockerfile": "FROM busybox\nCOPY\n",
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ctx.Close()
+
+	if _, err1 = buildImageFromContext(name, ctx, false); err1 == nil {
+		t.Fatal("Build 1 was supposed to fail, but didn't")
+	}
+
+	ctx.Add("Dockerfile", "FROM busybox\nCOPY    ")
+	if _, err2 = buildImageFromContext(name, ctx, false); err2 == nil {
+		t.Fatal("Build 2 was supposed to fail, but didn't")
+	}
+
+	// Skip over the times
+	e1 := err1.Error()[strings.Index(err1.Error(), `level="`):]
+	e2 := err2.Error()[strings.Index(err1.Error(), `level="`):]
+
+	// Ignore whitespace since that's what were verifying doesn't change stuff
+	if strings.Replace(e1, " ", "", -1) != strings.Replace(e2, " ", "", -1) {
+		t.Fatalf("Build 2's error wasn't the same as build 1's\n1:%s\n2:%s", err1, err2)
+	}
+
+	ctx.Add("Dockerfile", "FROM busybox\n   COPY")
+	if _, err2 = buildImageFromContext(name, ctx, false); err2 == nil {
+		t.Fatal("Build 3 was supposed to fail, but didn't")
+	}
+
+	// Skip over the times
+	e1 = err1.Error()[strings.Index(err1.Error(), `level="`):]
+	e2 = err2.Error()[strings.Index(err1.Error(), `level="`):]
+
+	// Ignore whitespace since that's what were verifying doesn't change stuff
+	if strings.Replace(e1, " ", "", -1) != strings.Replace(e2, " ", "", -1) {
+		t.Fatalf("Build 3's error wasn't the same as build 1's\n1:%s\n3:%s", err1, err2)
+	}
+
+	ctx.Add("Dockerfile", "FROM busybox\n   COPY    ")
+	if _, err2 = buildImageFromContext(name, ctx, false); err2 == nil {
+		t.Fatal("Build 4 was supposed to fail, but didn't")
+	}
+
+	// Skip over the times
+	e1 = err1.Error()[strings.Index(err1.Error(), `level="`):]
+	e2 = err2.Error()[strings.Index(err1.Error(), `level="`):]
+
+	// Ignore whitespace since that's what were verifying doesn't change stuff
+	if strings.Replace(e1, " ", "", -1) != strings.Replace(e2, " ", "", -1) {
+		t.Fatalf("Build 4's error wasn't the same as build 1's\n1:%s\n4:%s", err1, err2)
+	}
+
+	logDone("build - test spaces")
+}
+
+func TestBuildSpacesWithQuotes(t *testing.T) {
+	// Test to make sure that spaces in quotes aren't lost
+	name := "testspacesquotes"
+	defer deleteImages(name)
+
+	dockerfile := `FROM busybox
+RUN echo "  \
+  foo  "`
+
+	_, out, err := buildImageWithOut(name, dockerfile, false)
+	if err != nil {
+		t.Fatal("Build failed:", err)
+	}
+
+	expecting := "\n    foo  \n"
+	if !strings.Contains(out, expecting) {
+		t.Fatalf("Bad output: %q expecting to contian %q", out, expecting)
+	}
+
+	logDone("build - test spaces with quotes")
+}
+
+// #4393
+func TestBuildVolumeFileExistsinContainer(t *testing.T) {
+	buildCmd := exec.Command(dockerBinary, "build", "-t", "docker-test-errcreatevolumewithfile", "-")
+	buildCmd.Stdin = strings.NewReader(`
+	FROM busybox
+	RUN touch /foo
+	VOLUME /foo
+	`)
+
+	out, _, err := runCommandWithOutput(buildCmd)
+	if err == nil || !strings.Contains(out, "file exists") {
+		t.Fatalf("expected build to fail when file exists in container at requested volume path")
+	}
+
+	logDone("build - errors when volume is specified where a file exists")
+}
+
+func TestBuildMissingArgs(t *testing.T) {
+	// Test to make sure that all Dockerfile commands (except the ones listed
+	// in skipCmds) will generate an error if no args are provided.
+	// Note: INSERT is deprecated so we exclude it because of that.
+
+	skipCmds := map[string]struct{}{
+		"CMD":        {},
+		"RUN":        {},
+		"ENTRYPOINT": {},
+		"INSERT":     {},
+	}
+
+	defer deleteAllContainers()
+
+	for cmd := range builder.EvaluateTable {
+		var dockerfile string
+
+		cmd = strings.ToUpper(cmd)
+
+		if _, ok := skipCmds[cmd]; ok {
+			continue
+		}
+
+		if cmd == "FROM" {
+			dockerfile = cmd
+		} else {
+			// Add FROM to make sure we don't complain about it missing
+			dockerfile = "FROM busybox\n" + cmd
+		}
+
+		ctx, err := fakeContext(dockerfile, map[string]string{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ctx.Close()
+		var out string
+		if out, err = buildImageFromContext("args", ctx, true); err == nil {
+			t.Fatalf("%s was supposed to fail. Out:%s", cmd, out)
+		}
+		if !strings.Contains(err.Error(), cmd+" requires") {
+			t.Fatalf("%s returned the wrong type of error:%s", cmd, err)
+		}
+	}
+
+	logDone("build - verify missing args")
+}
+
+func TestBuildEmptyScratch(t *testing.T) {
+	defer deleteImages("sc")
+	_, out, err := buildImageWithOut("sc", "FROM scratch", true)
+	if err == nil {
+		t.Fatalf("Build was supposed to fail")
+	}
+	if !strings.Contains(out, "No image was generated") {
+		t.Fatalf("Wrong error message: %v", out)
+	}
+	logDone("build - empty scratch Dockerfile")
 }

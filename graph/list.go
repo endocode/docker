@@ -97,7 +97,7 @@ func (s *TagStore) CmdImages(job *engine.Job) engine.Status {
 				continue
 			}
 		}
-		_, err := s.graph.GetACI(id)
+		_, _, err := s.graph.GetACI(id)
 		if err != nil {
 			log.Printf("Warning: couldn't load %s (%s): %s", id, name, err)
 			continue

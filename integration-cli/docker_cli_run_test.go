@@ -493,6 +493,37 @@ func TestVolumesFromGetsProperMode(t *testing.T) {
 	logDone("run - volumes from ignores `rw` if inherrited volume is `ro`")
 }
 
+// Test for GH#10618
+func TestRunNoDupVolumes(t *testing.T) {
+
+	bindPath1, err := ioutil.TempDir("", "test1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(bindPath1)
+
+	bindPath2, err := ioutil.TempDir("", "test2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(bindPath2)
+
+	mountstr1 := bindPath1 + ":/someplace"
+	mountstr2 := bindPath2 + ":/someplace"
+
+	cmd := exec.Command(dockerBinary, "run", "-v", mountstr1, "-v", mountstr2, "busybox", "true")
+	if out, _, err := runCommandWithOutput(cmd); err == nil {
+		t.Fatal("Expected error about duplicate volume definitions")
+	} else {
+		if !strings.Contains(out, "Duplicate volume") {
+			t.Fatalf("Expected 'duplicate volume' error, got %v", err)
+		}
+	}
+	deleteAllContainers()
+
+	logDone("run - don't allow multiple (bind) volumes on the same container target")
+}
+
 // Test for #1351
 func TestRunApplyVolumesFromBeforeVolumes(t *testing.T) {
 	cmd := exec.Command(dockerBinary, "run", "--name", "parent", "-v", "/test", "busybox", "touch", "/test/foo")
@@ -1367,7 +1398,7 @@ func TestRunDisallowBindMountingRootToRoot(t *testing.T) {
 
 	deleteAllContainers()
 
-	logDone("run - bind mount /:/ as volume should fail")
+	logDone("run - bind mount /:/ as volume should not work")
 }
 
 // Verify that a container gets default DNS when only localhost resolvers exist
@@ -1751,6 +1782,23 @@ func TestRunAttachStdOutAndErrTTYMode(t *testing.T) {
 	deleteAllContainers()
 
 	logDone("run - Attach stderr and stdout with -t")
+}
+
+// Test for #10388 - this will run the same test as TestRunAttachStdOutAndErrTTYMode
+// but using --attach instead of -a to make sure we read the flag correctly
+func TestRunAttachWithDettach(t *testing.T) {
+	defer deleteAllContainers()
+
+	cmd := exec.Command(dockerBinary, "run", "-d", "--attach", "stdout", "busybox", "true")
+
+	_, stderr, _, err := runCommandWithStdoutStderr(cmd)
+	if err == nil {
+		t.Fatalf("Container should have exited with error code different than 0", err)
+	} else if !strings.Contains(stderr, "Conflicting options: -a and -d") {
+		t.Fatalf("Should have been returned an error with conflicting options -a and -d")
+	}
+
+	logDone("run - Attach stdout with -d")
 }
 
 func TestRunState(t *testing.T) {
@@ -2186,7 +2234,7 @@ func TestRunCidFileCleanupIfEmpty(t *testing.T) {
 		t.Fatalf("empty CIDFile %q should've been deleted", tmpCidFile)
 	}
 	deleteAllContainers()
-	logDone("run - cleanup empty cidfile on fail")
+	logDone("run - cleanup empty cidfile on error")
 }
 
 // #2098 - Docker cidFiles only contain short version of the containerId
@@ -2319,7 +2367,7 @@ func TestRunPortInUse(t *testing.T) {
 	}
 
 	deleteAllContainers()
-	logDone("run - fail if port already in use")
+	logDone("run - error out if port already in use")
 }
 
 // https://github.com/docker/docker/issues/8428

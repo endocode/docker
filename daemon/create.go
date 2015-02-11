@@ -35,6 +35,9 @@ func (daemon *Daemon) ContainerCreate(job *engine.Job) engine.Status {
 	if config.Memory > 0 && config.MemorySwap > 0 && config.MemorySwap < config.Memory {
 		return job.Errorf("Minimum memoryswap limit should be larger than memory limit, see usage.\n")
 	}
+	if config.Memory == 0 && config.MemorySwap > 0 {
+		return job.Errorf("You should always set the Memory limit when using Memoryswap limit, see usage.\n")
+	}
 
 	var hostConfig *runconfig.HostConfig
 	if job.EnvExists("HostConfig") {
@@ -90,7 +93,7 @@ func (daemon *Daemon) CreateACIContainer(config *runconfig.Config, hostConfig *r
 		aciImageManifest *schema.ImageManifest
 	)
 
-	aciImageManifest, err = daemon.repositories.LookupACIImage(config.Image)
+	imgID, aciImageManifest, err = daemon.repositories.LookupACIImage(config.Image)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -98,8 +101,6 @@ func (daemon *Daemon) CreateACIContainer(config *runconfig.Config, hostConfig *r
 	if warnings, err = daemon.mergeAndVerifyConfigACI(config, aciImageManifest); err != nil {
 		return nil, nil, err
 	}
-
-	imgID = daemon.repositories.ACIRepo[config.Image]
 
 	if container, err = daemon.newContainer(name, config, config.Format, imgID); err != nil {
 		return nil, nil, err
@@ -152,7 +153,10 @@ func (daemon *Daemon) CreateDockerContainer(config *runconfig.Config, hostConfig
 	if warnings, err = daemon.mergeAndVerifyConfig(config, img); err != nil {
 		return nil, nil, err
 	}
-	if hostConfig != nil && hostConfig.SecurityOpt == nil {
+	if hostConfig == nil {
+		hostConfig = &runconfig.HostConfig{}
+	}
+	if hostConfig.SecurityOpt == nil {
 		hostConfig.SecurityOpt, err = daemon.GenerateSecurityOpt(hostConfig.IpcMode, hostConfig.PidMode)
 		if err != nil {
 			return nil, nil, err
@@ -190,9 +194,9 @@ func (daemon *Daemon) GenerateSecurityOpt(ipcMode runconfig.IpcMode, pidMode run
 		return label.DisableSecOpt(), nil
 	}
 	if ipcContainer := ipcMode.Container(); ipcContainer != "" {
-		c := daemon.Get(ipcContainer)
-		if c == nil {
-			return nil, fmt.Errorf("no such container to join IPC: %s", ipcContainer)
+		c, err := daemon.Get(ipcContainer)
+		if err != nil {
+			return nil, err
 		}
 		if !c.IsRunning() {
 			return nil, fmt.Errorf("cannot join IPC of a non running container: %s", ipcContainer)

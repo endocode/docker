@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os/exec"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -489,4 +490,79 @@ func TestPsListContainersFilterExited(t *testing.T) {
 	}
 
 	logDone("ps - test ps filter exited")
+}
+
+func TestPsRightTagName(t *testing.T) {
+	tag := "asybox:shmatest"
+	defer deleteAllContainers()
+	defer deleteImages(tag)
+	if out, err := exec.Command(dockerBinary, "tag", "busybox", tag).CombinedOutput(); err != nil {
+		t.Fatalf("Failed to tag image: %s, out: %q", err, out)
+	}
+
+	var id1 string
+	if out, err := exec.Command(dockerBinary, "run", "-d", "busybox", "top").CombinedOutput(); err != nil {
+		t.Fatalf("Failed to run container: %s, out: %q", err, out)
+	} else {
+		id1 = strings.TrimSpace(string(out))
+	}
+
+	var id2 string
+	if out, err := exec.Command(dockerBinary, "run", "-d", tag, "top").CombinedOutput(); err != nil {
+		t.Fatalf("Failed to run container: %s, out: %q", err, out)
+	} else {
+		id2 = strings.TrimSpace(string(out))
+	}
+	out, err := exec.Command(dockerBinary, "ps", "--no-trunc").CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to run 'ps': %s, out: %q", err, out)
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	// skip header
+	lines = lines[1:]
+	if len(lines) != 2 {
+		t.Fatalf("There should be 2 running container, got %d", len(lines))
+	}
+	for _, line := range lines {
+		f := strings.Fields(line)
+		switch f[0] {
+		case id1:
+			if f[1] != "busybox:latest" {
+				t.Fatalf("Expected %s tag for id %s, got %s", "busybox", id1, f[1])
+			}
+		case id2:
+			if f[1] != tag {
+				t.Fatalf("Expected %s tag for id %s, got %s", tag, id1, f[1])
+			}
+		default:
+			t.Fatalf("Unexpected id %s, expected %s and %s", f[0], id1, id2)
+		}
+	}
+	logDone("ps - right tags for containers")
+}
+
+func TestPsLinkedWithNoTrunc(t *testing.T) {
+	defer deleteAllContainers()
+	if out, err := exec.Command(dockerBinary, "run", "--name=first", "-d", "busybox", "top").CombinedOutput(); err != nil {
+		t.Fatalf("Output: %s, err: %s", out, err)
+	}
+	if out, err := exec.Command(dockerBinary, "run", "--name=second", "--link=first:first", "-d", "busybox", "top").CombinedOutput(); err != nil {
+		t.Fatalf("Output: %s, err: %s", out, err)
+	}
+	out, err := exec.Command(dockerBinary, "ps", "--no-trunc").CombinedOutput()
+	if err != nil {
+		t.Fatalf("Output: %s, err: %s", out, err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	// strip header
+	lines = lines[1:]
+	expected := []string{"second", "first,second/first"}
+	var names []string
+	for _, l := range lines {
+		fields := strings.Fields(l)
+		names = append(names, fields[len(fields)-1])
+	}
+	if !reflect.DeepEqual(expected, names) {
+		t.Fatalf("Expected array: %v, got: %v", expected, names)
+	}
 }

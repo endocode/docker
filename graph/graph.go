@@ -92,12 +92,14 @@ func (graph *Graph) LoadACIManifest(root string) (*schema.ImageManifest, error) 
 	return getManifestFromDir(root)
 }
 
-func (graph *Graph) GetACI(name string) (*schema.ImageManifest, error) {
+func (graph *Graph) GetACI(name string) (string, *schema.ImageManifest, error) {
+	var manifest *schema.ImageManifest
 	id, err := graph.idIndex.Get(name)
 	if err != nil {
-		return nil, fmt.Errorf("could not find image: %v", err)
+		return "", nil, fmt.Errorf("could not find image: %v", err)
 	}
-	return graph.LoadACIManifest(graph.ImageRoot(id))
+	manifest, err = graph.LoadACIManifest(graph.ImageRoot(id))
+	return id, manifest, err
 }
 
 // Get returns the image with the given id, or an error if the image doesn't exist.
@@ -621,7 +623,7 @@ func (graph *Graph) walkAllACI(handler func(*schema.ImageManifest)) error {
 		return err
 	}
 	for _, st := range files {
-		if img, err := graph.GetACI(st.Name()); err != nil {
+		if _, img, err := graph.GetACI(st.Name()); err != nil {
 			// Skip image
 			continue
 		} else if handler != nil {
@@ -657,7 +659,7 @@ func (graph *Graph) ByParentACI(repo map[string]string) (map[string][]*schema.Im
 	byParent := make(map[string][]*schema.ImageManifest)
 	err := graph.walkAllACI(func(img *schema.ImageManifest) {
 		for _, dep := range img.Dependencies {
-			parent, err := graph.GetACI(string(dep.App))
+			_, parent, err := graph.GetACI(string(dep.App))
 			if err != nil {
 				continue
 			}

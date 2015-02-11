@@ -53,11 +53,11 @@ func (s *TagStore) pullACIImage(job *engine.Job) engine.Status {
 	img := job.Args[0]
 
 	// Maybe we already have the image
-	manifest, err := s.GetACIImage(img)
+	imgID, _, err := s.GetACIImage(img)
 	if err != nil {
 		return job.Error(err)
 	}
-	if manifest != nil {
+	if imgID != "" {
 		return engine.StatusOK
 	}
 
@@ -100,7 +100,7 @@ func (s *TagStore) pullACIImage(job *engine.Job) engine.Status {
 func (s *TagStore) doStuffWithACI(job *engine.Job, aci io.ReadCloser) engine.Status {
 	if manifest, id, err := s.graph.RegisterACI(aci); err != nil {
 		return job.Error(err)
-	} else if err := s.SetACI(manifest, id, false); err != nil {
+	} else if err := s.SetACI(manifest, id, true); err != nil {
 		return job.Error(err)
 	}
 	return engine.StatusOK
@@ -202,7 +202,7 @@ func (s *TagStore) pullDockerImage(job *engine.Job) engine.Status {
 		logName += ":" + tag
 	}
 
-	if len(repoInfo.Index.Mirrors) == 0 && (repoInfo.Index.Official || endpoint.Version == registry.APIVersion2) {
+	if len(repoInfo.Index.Mirrors) == 0 && ((repoInfo.Official && repoInfo.Index.Official) || endpoint.Version == registry.APIVersion2) {
 		j := job.Eng.Job("trust_update_base")
 		if err = j.Run(); err != nil {
 			log.Errorf("error updating trust base graph: %s", err)
@@ -561,9 +561,8 @@ func (s *TagStore) pullV2Tag(eng *engine.Engine, r *registry.Session, out io.Wri
 
 	if verified {
 		log.Printf("Image manifest for %s:%s has been verified", repoInfo.CanonicalName, tag)
-	} else {
-		out.Write(sf.FormatStatus(tag, "Pulling from %s", repoInfo.CanonicalName))
 	}
+	out.Write(sf.FormatStatus(tag, "Pulling from %s", repoInfo.CanonicalName))
 
 	downloads := make([]downloadInfo, len(manifest.FSLayers))
 
@@ -627,7 +626,8 @@ func (s *TagStore) pullV2Tag(eng *engine.Engine, r *registry.Session, out io.Wri
 				out.Write(sf.FormatProgress(utils.TruncateID(img.ID), "Verifying Checksum", nil))
 
 				if finalChecksum := tarSumReader.Sum(nil); !strings.EqualFold(finalChecksum, sumStr) {
-					return fmt.Errorf("image verification failed: checksum mismatch - expected %q but got %q", sumStr, finalChecksum)
+					log.Infof("Image verification failed: checksum mismatch - expected %q but got %q", sumStr, finalChecksum)
+					verified = false
 				}
 
 				out.Write(sf.FormatProgress(utils.TruncateID(img.ID), "Download complete", nil))
@@ -686,7 +686,9 @@ func (s *TagStore) pullV2Tag(eng *engine.Engine, r *registry.Session, out io.Wri
 
 	}
 
-	out.Write(sf.FormatStatus(repoInfo.CanonicalName+":"+tag, "The image you are pulling has been verified. Important: image verification is a tech preview feature and should not be relied on to provide security."))
+	if verified && layersDownloaded {
+		out.Write(sf.FormatStatus(repoInfo.CanonicalName+":"+tag, "The image you are pulling has been verified. Important: image verification is a tech preview feature and should not be relied on to provide security."))
+	}
 
 	if err = s.Set(repoInfo.LocalName, tag, downloads[0].img.ID, true); err != nil {
 		return false, err

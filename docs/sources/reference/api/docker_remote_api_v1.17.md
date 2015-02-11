@@ -177,7 +177,8 @@ Json Parameters:
       for the container.
 -   **User** - A string value containg the user to use inside the container.
 -   **Memory** - Memory limit in bytes.
--   **MemorySwap**- Total memory usage (memory + swap); set `-1` to disable swap.
+-   **MemorySwap**- Total memory limit (memory + swap); set `-1` to disable swap,
+      always use this with `memory`, and make the value larger than `memory`.
 -   **CpuShares** - An integer value containing the CPU Shares for container
       (ie. the relative weight vs othercontainers).
     **CpuSet** - String value containg the cgroups Cpuset to use.
@@ -522,6 +523,8 @@ Status Codes:
 `GET /containers/(id)/stats`
 
 This endpoint returns a live stream of a container's resource usage statistics.
+
+> **Note**: this functionality currently only works when using the *libcontainer* exec-driver.
 
 **Example request**:
 
@@ -1072,6 +1075,7 @@ Query Parameters:
 -   **dockerfile** - path within the build context to the Dockerfile
 -   **t** – repository name (and optionally a tag) to be applied to
         the resulting image in case of success
+-   **remote** – git or HTTP/HTTPS URI build source
 -   **q** – suppress verbose build output
 -   **nocache** – do not use the cache when building the image
 -   **pull** - attempt to pull the image even if an older image exists locally
