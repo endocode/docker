@@ -107,18 +107,18 @@ func (store *TagStore) reload() error {
 	return nil
 }
 
-func (store *TagStore) LookupACIImage(name string) (*schema.ImageManifest, error) {
-	img, err := store.GetACIImage(name)
+func (store *TagStore) LookupACIImage(name string) (string, *schema.ImageManifest, error) {
+	id, img, err := store.GetACIImage(name)
 	store.Lock()
 	defer store.Unlock()
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	} else if img == nil {
-		if img, err = store.graph.GetACI(name); err != nil {
-			return nil, err
+		if id, img, err = store.graph.GetACI(name); err != nil {
+			return "", nil, err
 		}
 	}
-	return img, nil
+	return id, img, nil
 }
 
 func (store *TagStore) LookupImage(name string) (*image.Image, error) {
@@ -218,7 +218,7 @@ func (store *TagStore) Delete(repoName, tag string) (bool, error) {
 }
 
 func (store *TagStore) SetACI(image *schema.ImageManifest, id string, force bool) error {
-	if _, err := store.LookupACIImage(id); err != nil {
+	if _, _, err := store.LookupACIImage(id); err != nil {
 		return err
 	}
 	store.Lock()
@@ -280,13 +280,13 @@ func (store *TagStore) Get(repoName string) (Repository, error) {
 	return nil, nil
 }
 
-func (store *TagStore) GetACIImage(name string) (*schema.ImageManifest, error) {
+func (store *TagStore) GetACIImage(name string) (string, *schema.ImageManifest, error) {
 	store.Lock()
 	defer store.Unlock()
 	if id, exists := store.ACIRepo[name]; exists {
 		return store.graph.GetACI(id)
 	}
-	return nil, nil
+	return "", nil, nil
 }
 
 func (store *TagStore) GetImage(repoName, tagOrID string) (*image.Image, error) {

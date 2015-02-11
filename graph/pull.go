@@ -53,11 +53,11 @@ func (s *TagStore) pullACIImage(job *engine.Job) engine.Status {
 	img := job.Args[0]
 
 	// Maybe we already have the image
-	manifest, err := s.GetACIImage(img)
+	imgID, _, err := s.GetACIImage(img)
 	if err != nil {
 		return job.Error(err)
 	}
-	if manifest != nil {
+	if imgID != "" {
 		return engine.StatusOK
 	}
 

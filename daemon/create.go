@@ -90,7 +90,7 @@ func (daemon *Daemon) CreateACIContainer(config *runconfig.Config, hostConfig *r
 		aciImageManifest *schema.ImageManifest
 	)
 
-	aciImageManifest, err = daemon.repositories.LookupACIImage(config.Image)
+	imgID, aciImageManifest, err = daemon.repositories.LookupACIImage(config.Image)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -98,8 +98,6 @@ func (daemon *Daemon) CreateACIContainer(config *runconfig.Config, hostConfig *r
 	if warnings, err = daemon.mergeAndVerifyConfigACI(config, aciImageManifest); err != nil {
 		return nil, nil, err
 	}
-
-	imgID = daemon.repositories.ACIRepo[config.Image]
 
 	if container, err = daemon.newContainer(name, config, config.Format, imgID); err != nil {
 		return nil, nil, err
