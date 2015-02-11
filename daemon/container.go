@@ -494,7 +494,8 @@ func (container *Container) buildHostsFiles(IP string) error {
 	}
 
 	for _, extraHost := range container.hostConfig.ExtraHosts {
-		parts := strings.Split(extraHost, ":")
+		// allow IPv6 addresses in extra hosts; only split on first ":"
+		parts := strings.SplitN(extraHost, ":", 2)
 		extraContent = append(extraContent, etchosts.Record{Hosts: parts[0], IP: parts[1]})
 	}
 
@@ -1168,7 +1169,12 @@ func (container *Container) updateParentsHosts() error {
 		if ref.ParentID == "0" {
 			continue
 		}
-		c := container.daemon.Get(ref.ParentID)
+
+		c, err := container.daemon.Get(ref.ParentID)
+		if err != nil {
+			log.Error(err)
+		}
+
 		if c != nil && !container.daemon.config.DisableNetwork && container.hostConfig.NetworkMode.IsPrivate() {
 			log.Debugf("Update /etc/hosts of %s for alias %s with ip %s", c.ID, ref.Name, container.NetworkSettings.IPAddress)
 			if err := etchosts.Update(c.HostsPath, container.NetworkSettings.IPAddress, ref.Name); err != nil {
@@ -1437,9 +1443,9 @@ func (container *Container) GetMountLabel() string {
 
 func (container *Container) getIpcContainer() (*Container, error) {
 	containerID := container.hostConfig.IpcMode.Container()
-	c := container.daemon.Get(containerID)
-	if c == nil {
-		return nil, fmt.Errorf("no such container to join IPC: %s", containerID)
+	c, err := container.daemon.Get(containerID)
+	if err != nil {
+		return nil, err
 	}
 	if !c.IsRunning() {
 		return nil, fmt.Errorf("cannot join IPC of a non running container: %s", containerID)
@@ -1454,9 +1460,9 @@ func (container *Container) getNetworkedContainer() (*Container, error) {
 		if len(parts) != 2 {
 			return nil, fmt.Errorf("no container specified to join network")
 		}
-		nc := container.daemon.Get(parts[1])
-		if nc == nil {
-			return nil, fmt.Errorf("no such container to join network: %s", parts[1])
+		nc, err := container.daemon.Get(parts[1])
+		if err != nil {
+			return nil, err
 		}
 		if !nc.IsRunning() {
 			return nil, fmt.Errorf("cannot join network of a non running container: %s", parts[1])

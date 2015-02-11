@@ -16,6 +16,7 @@ import (
 	_ "github.com/docker/docker/daemon/execdriver/native"
 	"github.com/docker/docker/dockerversion"
 	"github.com/docker/docker/engine"
+	"github.com/docker/docker/pkg/homedir"
 	flag "github.com/docker/docker/pkg/mflag"
 	"github.com/docker/docker/pkg/signal"
 	"github.com/docker/docker/registry"
@@ -36,7 +37,7 @@ func init() {
 
 func migrateKey() (err error) {
 	// Migrate trust key if exists at ~/.docker/key.json and owned by current user
-	oldPath := filepath.Join(getHomeDir(), ".docker", defaultTrustKeyFile)
+	oldPath := filepath.Join(homedir.Get(), ".docker", defaultTrustKeyFile)
 	newPath := filepath.Join(getDaemonConfDir(), defaultTrustKeyFile)
 	if _, statErr := os.Stat(newPath); os.IsNotExist(statErr) && utils.IsFileOwner(oldPath) {
 		defer func() {
@@ -129,9 +130,9 @@ func mainDaemon() {
 	// Serve api
 	job := eng.Job("serveapi", flHosts...)
 	job.SetenvBool("Logging", true)
-	job.SetenvBool("EnableCors", *flEnableCors)
+	job.SetenvBool("EnableCors", daemonCfg.EnableCors)
 	job.Setenv("Version", dockerversion.VERSION)
-	job.Setenv("SocketGroup", *flSocketGroup)
+	job.Setenv("SocketGroup", daemonCfg.SocketGroup)
 
 	job.SetenvBool("Tls", *flTls)
 	job.SetenvBool("TlsVerify", *flTlsVerify)
