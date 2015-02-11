@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 
+	"github.com/appc/spec/discovery"
 	"github.com/appc/spec/schema"
 
 	"github.com/docker/docker/engine"
@@ -93,7 +94,16 @@ func (daemon *Daemon) CreateACIContainer(config *runconfig.Config, hostConfig *r
 		aciImageManifest *schema.ImageManifest
 	)
 
-	imgID, aciImageManifest, err = daemon.repositories.LookupACIImage(config.Image)
+	// the image name (config.Image) passed by the user might be:
+	// - a name to be discovered "coreos.com/etcd:v2.0.0" (with tags / version)
+	// - an URL http:// or file://
+	app, err := discovery.NewAppFromString(config.Image)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// FIXME: tags/version not supported yet: app.Name passed directly
+	imgID, aciImageManifest, err = daemon.repositories.LookupACIImage(string(app.Name))
 	if err != nil {
 		return nil, nil, err
 	}
