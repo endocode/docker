@@ -183,7 +183,8 @@ func (graph *Graph) RegisterACI(aci io.Reader) (*schema.ImageManifest, string, e
 		return nil, "", err
 	}
 
-	// empty string means no parent
+	// FIXME: ACI can have dependencies. They are not supported yet.
+	// At the moment, the parent is not specified (empty string)
 	if err := graph.driver.Create(id, ""); err != nil {
 		return nil, "", err
 	}

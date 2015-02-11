@@ -2196,7 +2196,7 @@ func (cli *DockerCli) createContainer(config *runconfig.Config, hostConfig *runc
 			return nil, err
 		}
 
-		// FIXME: ACI: the name of the image as specified in the
+		// FIXME(ACI): the name of the image as specified in the
 		// manifest might be unrelated to the URL specified above. So
 		// instead of retrying with the same parameters, we should
 		// retry with the id returned by the cli.pullImageCustomOut

@@ -96,13 +96,18 @@ func (daemon *Daemon) CreateACIContainer(config *runconfig.Config, hostConfig *r
 
 	// the image name (config.Image) passed by the user might be:
 	// - a name to be discovered "coreos.com/etcd:v2.0.0" (with tags / version)
+	//     => it *might* have just been pulled if it didn't not exist yet
+	//
 	// - an URL http:// or file://
+	//     => it has just been pulled.
+	//        FIXME(ACI): the cli should give the real image id but does not atm,
+	//                    see api/client/commands.go:createContainer()
 	app, err := discovery.NewAppFromString(config.Image)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// FIXME: tags/version not supported yet: app.Name passed directly
+	// FIXME(ACI): tags/version not supported yet: app.Name passed directly
 	imgID, aciImageManifest, err = daemon.repositories.LookupACIImage(string(app.Name))
 	if err != nil {
 		return nil, nil, err

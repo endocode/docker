@@ -859,8 +859,6 @@ func (container *Container) jsonPath() (string, error) {
 // ACI images have an Image Manifest defined by the App Container Specification
 // https://github.com/appc/spec/blob/master/SPEC.md
 func (container *Container) manifestPath() (string, error) {
-	// FIXME
-	//return daemon.repositories.LookupACIImage()
 	return container.getRootResourcePath("manifest")
 }
 
