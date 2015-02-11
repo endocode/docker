@@ -117,13 +117,13 @@ func MergeACI(userConf *Config, manifest *schema.ImageManifest) error {
 		userConf.User = manifest.App.User
 	}
 	if manifest.App.Group != userConf.User {
-		// FIXME: Handle group correctly. For now, just do a basic partial check...
+		// FIXME(ACI): Handle group correctly. For now, just do a basic partial check...
 		return fmt.Errorf("Groups in ACI are not yet supported by Docker. ")
 	}
 
-	// FIXME: Read manifest.App.Isolators
+	// FIXME(ACI): Read manifest.App.Isolators
 
-	// FIXME: Do something with manifest.App.Ports
+	// FIXME(ACI): Do something with manifest.App.Ports
 
 	for _, imageEnv := range manifest.App.Environment {
 		found := false
@@ -147,7 +147,7 @@ func MergeACI(userConf *Config, manifest *schema.ImageManifest) error {
 		userConf.WorkingDir = manifest.App.WorkingDirectory
 	}
 
-	// FIXME: manifest.App.MountPoints
+	// FIXME(ACI): manifest.App.MountPoints
 
 	return nil
 }

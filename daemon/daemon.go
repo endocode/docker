@@ -493,7 +493,6 @@ func (daemon *Daemon) checkDeprecatedExpose(config *runconfig.Config) bool {
 	return false
 }
 
-// TODO: Probably more needs to be done here
 func (daemon *Daemon) mergeAndVerifyConfigACI(config *runconfig.Config, manifest *schema.ImageManifest) ([]string, error) {
 	if manifest.App == nil {
 		return nil, fmt.Errorf("No app in ACI manifest")

@@ -2197,6 +2197,13 @@ func (cli *DockerCli) createContainer(config *runconfig.Config, hostConfig *runc
 		if err = cli.pullImageCustomOut(config, cli.err); err != nil {
 			return nil, err
 		}
+
+		// FIXME(ACI): the name of the image as specified in the
+		// manifest might be unrelated to the URL specified above. So
+		// instead of retrying with the same parameters, we should
+		// retry with the id returned by the cli.pullImageCustomOut
+		// call above.
+
 		// Retry
 		if stream, _, err = cli.call("POST", "/containers/create?"+containerValues.Encode(), mergedConfig, false); err != nil {
 			return nil, err

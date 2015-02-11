@@ -115,6 +115,7 @@ func (s *TagStore) CmdImages(job *engine.Job) engine.Status {
 				out.SetJson("ParentId", "")
 				out.SetList("RepoTags", []string{"ACI: " + name})
 				out.SetJson("Id", id)
+				// FIXME: following fields not properly implemented yet
 				out.SetInt64("Created", 0)
 				out.SetInt64("Size", -1)
 				out.SetInt64("VirtualSize", -1)

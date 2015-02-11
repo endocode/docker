@@ -71,7 +71,7 @@ func (s *TagStore) pullACIImage(job *engine.Job) engine.Status {
 		if err != nil {
 			return job.Error(err)
 		}
-		ep, err := discovery.DiscoverEndpoints(*app, true)
+		ep, _, err := discovery.DiscoverEndpoints(*app, true)
 		if err != nil {
 			return job.Error(err)
 		}
@@ -94,10 +94,7 @@ func (s *TagStore) pullACIImage(job *engine.Job) engine.Status {
 		aci = image
 	}
 	defer aci.Close()
-	return s.doStuffWithACI(job, aci)
-}
 
-func (s *TagStore) doStuffWithACI(job *engine.Job, aci io.ReadCloser) engine.Status {
 	if manifest, id, err := s.graph.RegisterACI(aci); err != nil {
 		return job.Error(err)
 	} else if err := s.SetACI(manifest, id, true); err != nil {
