@@ -81,7 +81,7 @@ func (daemon *Daemon) Create(config *runconfig.Config, hostConfig *runconfig.Hos
 	case "aci":
 		return daemon.CreateACIContainer(config, hostConfig, name)
 	default:
-		return nil, nil, fmt.Errorf("Invalid image format: %s", config.Format)
+		return daemon.CreateDockerContainer(config, hostConfig, name)
 	}
 }
 

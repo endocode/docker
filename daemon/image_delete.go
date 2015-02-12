@@ -35,7 +35,7 @@ func (daemon *Daemon) deleteImage(eng *engine.Engine, format, name string, imgs 
 	case "aci":
 		return daemon.deleteACIImage(eng, name, imgs, first, force, noprune)
 	default:
-		return fmt.Errorf("Invalid image format: %s", format)
+		return daemon.deleteDockerImage(eng, name, imgs, first, force, noprune)
 	}
 }
 

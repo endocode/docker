@@ -1330,7 +1330,7 @@ func (cli *DockerCli) CmdPull(args ...string) error {
 	case "aci":
 		return cli.pullACI(cmd, v)
 	default:
-		return fmt.Errorf("Invalid image format: %s", *format)
+		return cli.pullDocker(cmd, v, allTags)
 	}
 }
 
