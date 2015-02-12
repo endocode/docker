@@ -658,6 +658,7 @@ func (graph *Graph) walkAll(handler func(*image.Image)) error {
 // will be a list of 3 images.
 // If an image has no children, it will not have an entry in the table.
 //
+// FIXME(ACI):
 // It is rather broken, because we retrieve parents based on names
 // instead of ids. Getting a parent by name might return different
 // image when it was actually created.
