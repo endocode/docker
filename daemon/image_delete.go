@@ -29,7 +29,7 @@ func (daemon *Daemon) ImageDelete(job *engine.Job) engine.Status {
 }
 
 func (daemon *Daemon) deleteImage(eng *engine.Engine, format, name string, imgs *engine.Table, first, force, noprune bool) error {
-	switch (format) {
+	switch format {
 	case "docker":
 		return daemon.deleteDockerImage(eng, name, imgs, first, force, noprune)
 	case "aci":
@@ -40,7 +40,7 @@ func (daemon *Daemon) deleteImage(eng *engine.Engine, format, name string, imgs 
 }
 
 func (daemon *Daemon) deleteACIImage(eng *engine.Engine, name string, imgs *engine.Table, first, force, noprune bool) error {
-	
+
 	id, img, err := daemon.Repositories().LookupACIImage(name)
 	if err != nil {
 		return fmt.Errorf("Failed to get an ACI image %s: %v", name, err)
@@ -76,6 +76,8 @@ func (daemon *Daemon) deleteACIImage(eng *engine.Engine, name string, imgs *engi
 	out.SetJson("Deleted", id)
 	imgs.Add(out)
 	eng.Job("log", "delete", id, "").Run()
+
+	// FIXME(ACI): we don't delete untagged parents yet (--no-prune)
 	// if !noprune {
 	// 	for _, dep := range img.Dependencies {
 	// 		err := daemon.deleteACIImage(eng, string(dep.App), imgs, false, force, noprune)
