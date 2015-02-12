@@ -40,7 +40,6 @@ func (daemon *Daemon) deleteImage(eng *engine.Engine, format, name string, imgs 
 }
 
 func (daemon *Daemon) deleteACIImage(eng *engine.Engine, name string, imgs *engine.Table, first, force, noprune bool) error {
-	
 	id, img, err := daemon.Repositories().LookupACIImage(name)
 	if err != nil {
 		return fmt.Errorf("Failed to get an ACI image %s: %v", name, err)
