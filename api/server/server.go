@@ -608,7 +608,7 @@ func postImagesCreateACI(eng *engine.Engine, version version.Version, w http.Res
 		job   *engine.Job
 	)
 	if image != "" { //pull
-		job = eng.Job("pull", "aci", image)
+		job = eng.Job("pull", image)
 	} else { //import
 		return errors.New("creating ACI image from tarball is not implemented")
 	}
