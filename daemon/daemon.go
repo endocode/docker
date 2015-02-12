@@ -655,7 +655,6 @@ func (daemon *Daemon) newContainer(name string, config *runconfig.Config, imgTyp
 		id  string
 		err error
 	)
-
 	id, name, err = daemon.generateIdAndName(name)
 	if err != nil {
 		return nil, err

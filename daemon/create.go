@@ -96,7 +96,7 @@ func (daemon *Daemon) CreateACIContainer(config *runconfig.Config, hostConfig *r
 
 	// the image name (config.Image) passed by the user might be:
 	// - a name to be discovered "coreos.com/etcd:v2.0.0" (with tags / version)
-	//     => it *might* have just been pulled if it didn't not exist yet
+	//     => it *might* have just been pulled if it did not exist yet
 	//
 	// - an URL http:// or file://
 	//     => it has just been pulled.
