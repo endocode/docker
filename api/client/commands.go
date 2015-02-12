@@ -1008,12 +1008,14 @@ func (cli *DockerCli) CmdRmi(args ...string) error {
 		cmd     = cli.Subcmd("rmi", "IMAGE [IMAGE...]", "Remove one or more images", true)
 		force   = cmd.Bool([]string{"f", "-force"}, false, "Force removal of the image")
 		noprune = cmd.Bool([]string{"-no-prune"}, false, "Do not delete untagged parents")
+		format  = cmd.String([]string{"-format"}, "docker", "Image format to work on")
 	)
 	cmd.Require(flag.Min, 1)
 
 	utils.ParseFlags(cmd, args, true)
 
 	v := url.Values{}
+	v.Set("format", *format)
 	if *force {
 		v.Set("force", "1")
 	}

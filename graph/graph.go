@@ -590,6 +590,7 @@ func (graph *Graph) Delete(name string) error {
 	return os.RemoveAll(tmp)
 }
 
+// MapACI returns a list of all ACI images in the graph, addressable by ID.
 func (graph *Graph) MapACI(repo map[string]string) (map[string]*schema.ImageManifest, error) {
 	images := make(map[string]*schema.ImageManifest)
 	err := graph.walkAllACI(func(image *schema.ImageManifest) {
@@ -604,7 +605,7 @@ func (graph *Graph) MapACI(repo map[string]string) (map[string]*schema.ImageMani
 	return images, nil
 }
 
-// Map returns a list of all images in the graph, addressable by ID.
+// Map returns a list of all docker images in the graph, addressable by ID.
 func (graph *Graph) Map() (map[string]*image.Image, error) {
 	images := make(map[string]*image.Image)
 	err := graph.walkAll(func(image *image.Image) {
@@ -656,6 +657,12 @@ func (graph *Graph) walkAll(handler func(*image.Image)) error {
 // If an image of id ID has 3 children images, then the value for key ID
 // will be a list of 3 images.
 // If an image has no children, it will not have an entry in the table.
+//
+// It is rather broken, because we retrieve parents based on names
+// instead of ids. Getting a parent by name might return different
+// image when it was actually created.
+//
+// We need to store parent ids in image manifest along with image id.
 func (graph *Graph) ByParentACI(repo map[string]string) (map[string][]*schema.ImageManifest, error) {
 	byParent := make(map[string][]*schema.ImageManifest)
 	err := graph.walkAllACI(func(img *schema.ImageManifest) {
@@ -696,7 +703,7 @@ func (graph *Graph) ByParent() (map[string][]*image.Image, error) {
 	return byParent, err
 }
 
-// Heads returns all ACI heads in the graph, keyed by id.
+// HeadsACI returns all ACI heads in the graph, keyed by id.
 // A head is an image which is not the parent of another image in the graph.
 func (graph *Graph) HeadsACI(repo map[string]string) (map[string]*schema.ImageManifest, error) {
 	heads := make(map[string]*schema.ImageManifest)
