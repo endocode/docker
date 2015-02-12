@@ -266,6 +266,9 @@ func Parse(cmd *flag.FlagSet, args []string) (*Config, *HostConfig, *flag.FlagSe
 		return nil, nil, cmd, err
 	}
 
+	if *flFormat == "" {
+		*flFormat = "docker"
+	}
 	if *flFormat != "docker" && *flFormat != "aci" {
 		return nil, nil, cmd, fmt.Errorf("invalid image format: %s", *flFormat)
 	}

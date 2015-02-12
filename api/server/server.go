@@ -542,7 +542,7 @@ func postImagesCreate(eng *engine.Engine, version version.Version, w http.Respon
 	case "aci":
 		return postImagesCreateACI(eng, version, w, r, vars)
 	default:
-		return fmt.Errorf("invalid image format: %s", format)
+		return postImagesCreateDocker(eng, version, w, r, vars)
 	}
 }
 
@@ -573,7 +573,7 @@ func postImagesCreateDocker(eng *engine.Engine, version version.Version, w http.
 				metaHeaders[k] = v
 			}
 		}
-		job = eng.Job("pull", "docker", image, tag)
+		job = eng.Job("pull", image, tag)
 		job.SetenvBool("parallel", version.GreaterThan("1.3"))
 		job.SetenvJson("metaHeaders", metaHeaders)
 		job.SetenvJson("authConfig", authConfig)
@@ -613,6 +613,7 @@ func postImagesCreateACI(eng *engine.Engine, version version.Version, w http.Res
 		return errors.New("creating ACI image from tarball is not implemented")
 	}
 
+	job.Setenv("image_format", "aci")
 	job.SetenvBool("json", true)
 	streamJSON(job, w, true)
 	if err := job.Run(); err != nil {
@@ -834,8 +835,9 @@ func deleteImages(eng *engine.Engine, version version.Version, w http.ResponseWr
 	if vars == nil {
 		return fmt.Errorf("Missing parameter")
 	}
-	var job = eng.Job("image_delete", r.Form.Get("format"), vars["name"])
+	var job = eng.Job("image_delete", vars["name"])
 	streamJSON(job, w, false)
+	job.Setenv("image_format", r.Form.Get("format"))
 	job.Setenv("force", r.Form.Get("force"))
 	job.Setenv("noprune", r.Form.Get("noprune"))
 

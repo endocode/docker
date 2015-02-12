@@ -22,14 +22,7 @@ import (
 )
 
 func (s *TagStore) CmdPull(job *engine.Job) engine.Status {
-	n := len(job.Args)
-
-	if n < 1 {
-		return job.Errorf("%s: no image format given", job.Name)
-	}
-
-	format := job.Args[0]
-	job.Args = job.Args[1:]
+	format := job.Getenv("image_format")
 
 	switch format {
 	case "docker":
@@ -37,13 +30,13 @@ func (s *TagStore) CmdPull(job *engine.Job) engine.Status {
 	case "aci":
 		return s.pullACIImage(job)
 	default:
-		return job.Errorf("%s: invalid image format: %s", job.Name, format)
+		return s.pullDockerImage(job)
 	}
 }
 
 func (s *TagStore) pullACIImage(job *engine.Job) engine.Status {
 	if n := len(job.Args); n != 1 {
-		return job.Errorf("Usage: %s aci URL", job.Name)
+		return job.Errorf("Usage: %s URL", job.Name)
 	}
 
 	var (
@@ -147,7 +140,7 @@ func newDiscoveryApp(img string) (*discovery.App, error) {
 
 func (s *TagStore) pullDockerImage(job *engine.Job) engine.Status {
 	if n := len(job.Args); n != 1 && n != 2 {
-		return job.Errorf("Usage: %s docker IMAGE [TAG]", job.Name)
+		return job.Errorf("Usage: %s IMAGE [TAG]", job.Name)
 	}
 
 	var (

@@ -12,11 +12,12 @@ import (
 )
 
 func (daemon *Daemon) ImageDelete(job *engine.Job) engine.Status {
-	if n := len(job.Args); n != 2 {
-		return job.Errorf("Usage: %s FORMAT IMAGE", job.Name)
+	if n := len(job.Args); n != 1 {
+		return job.Errorf("Usage: %s IMAGE", job.Name)
 	}
+	format := job.Getenv("image_format")
 	imgs := engine.NewTable("", 0)
-	if err := daemon.deleteImage(job.Eng, job.Args[0], job.Args[1], imgs, true, job.GetenvBool("force"), job.GetenvBool("noprune")); err != nil {
+	if err := daemon.deleteImage(job.Eng, format, job.Args[0], imgs, true, job.GetenvBool("force"), job.GetenvBool("noprune")); err != nil {
 		return job.Error(err)
 	}
 	if len(imgs.Data) == 0 {
